@@ -4,7 +4,9 @@
 
 ### Goal
 
-Build an MCP (Model Context Protocol) based design system tooling layer so an AI agent can understand and use a specific design system effectively.
+Build a CLI-based design system tooling layer so an AI agent can understand and use a specific design system effectively.
+
+The system should also be designed so the same core logic can later be extended to an MCP (Model Context Protocol) interface.
 
 ### Problems to Solve
 
@@ -18,7 +20,7 @@ Examples:
 - IconButton
 - GhostButton
 
-The AI has difficulty deciding which component should be used in which situation.
+The AI has difficulty deciding which component should be selected in which situation.
 
 #### Problem 2 - Design system documentation exceeds the context window
 
@@ -44,7 +46,7 @@ At the POC stage, the team still needs UI that preserves the product look and fe
 
 ## 2. Solution Strategy
 
-> Instead of making the AI read the design system documentation directly, provide structured design system information as tools at runtime based on the selected design system.
+> Instead of making the AI read design system documentation directly, provide the selected design system information through structured commands at runtime.
 
 ### Existing Flow
 
@@ -60,11 +62,11 @@ Code Generation
 
 ### Proposed Flow
 
-AI
+AI / User
 
 ↓
 
-MCP Server
+CLI Command
 
 ↓
 
@@ -80,11 +82,13 @@ Design System
 
 ### Core Idea
 
-The AI does not read raw documentation directly. It calls tools, and those tools operate based on the currently selected design system.
+The AI does not read raw documentation directly. It calls commands, and those commands operate based on the currently selected design system.
+
+The core logic should remain separate from the interface so the same logic can later be exposed through MCP tools.
 
 ## 3. Project Objectives
 
-Build an MCP server that provides the following three capabilities.
+Build a CLI tool that provides the following three capabilities.
 
 ### 1) Component Search
 
@@ -92,13 +96,17 @@ Search related components inside the currently selected design system using a na
 
 Example:
 
-query: find form input components
+```bash
+ds-ai search --adapter custom "form input component"
+```
 
 Result:
 
-- Input
-- Textarea
-- Select
+```text
+Input
+Textarea
+Select
+```
 
 ### 2) Component Recommendation
 
@@ -106,20 +114,30 @@ Recommend components for a page goal based on the currently selected design syst
 
 Example:
 
-query: recommend components for a login page
+```bash
+ds-ai recommend --adapter custom "login page"
+```
 
 Result:
 
-- Form
-- Input
-- PasswordInput
-- Button
+```text
+Form
+Input
+PasswordInput
+Button
+```
 
 ### 3) UI Generation
 
 Generate code by composing components from the currently selected design system based on a description.
 
 Example:
+
+```bash
+ds-ai generate --adapter custom "login page"
+```
+
+Result:
 
 ```tsx
 <Form>
@@ -131,11 +149,15 @@ Example:
 
 ## 4. System Architecture
 
-AI Agent
+User / AI Agent
 
 ↓
 
-MCP Server
+CLI Interface
+
+↓
+
+Core Engine
 
 ↓
 
@@ -155,13 +177,11 @@ Normalized Component Metadata
 
 UI Library / Token Source
 
-(source differs by adapter)
+### Design Principles
 
-Examples:
+The core engine must not depend on a specific interface.
 
-- Custom / Company -> Figma Variables
-- Shadcn -> theme / CSS variables
-- External Library -> token JSON / theme config
+Search, recommend, and generate logic should be reusable across both CLI and future MCP interfaces.
 
 ## 5. Repository Structure
 
@@ -172,33 +192,35 @@ apps/
 packages/
   ui
   ai-metadata
-  mcp-server
+  core
+  cli
 ```
 
 ### apps/web-demo
 
 A Next.js demo app that renders generated UI.
 
-### packages/ui
+### packages/core
 
-Design system components.
+Core business logic.
 
 Examples:
 
-- Button
-- Input
-- Card
-- Modal
+- searchComponents()
+- recommendComponents()
+- generateUI()
 
-(about 10 components)
+### packages/cli
+
+Provides the CLI command interface.
 
 ### packages/ai-metadata
 
 Component metadata used by the AI.
 
-### packages/mcp-server
+### packages/ui
 
-Provides the AI tool interface.
+Design system components.
 
 ## 6. Component Metadata Design
 
@@ -274,7 +296,7 @@ Use the Adapter pattern to connect multiple design systems.
 
 ### Background
 
-Existing shadcn MCP implementations usually target only shadcn registry based components.
+Existing shadcn-based tooling usually targets only shadcn registry components.
 
 That creates several limitations:
 
@@ -314,7 +336,7 @@ That is why it is more accurate to explicitly select the current design system f
 
 ### Direction
 
-Design an adapter based abstraction layer that is not tied to a single design system, but at runtime select one active adapter and limit search, recommendation, and generation to that adapter only.
+Design an adapter-based abstraction layer that is not tied to a single design system, but at runtime select one active adapter and limit search, recommendation, and generation to that adapter only.
 
 ### Structure
 
@@ -332,7 +354,7 @@ Active Adapter
 
 Each adapter transforms the structure of its design system into a shared metadata format.
 
-The AI uses one consistent tool interface, but actual behavior is determined by the currently active adapter.
+The core engine uses one consistent interface, but actual behavior is determined by the currently active adapter.
 
 Each adapter should also return both frontend metadata and design token references, while normalizing token sources into a common structure.
 
@@ -385,7 +407,7 @@ Example token sources:
 
 ### Registry Responsibility
 
-Manages the list of adapters available to the MCP server.
+Manages the list of adapters available to the system.
 
 Examples:
 
@@ -397,21 +419,15 @@ At runtime, the user selects one of them and that selection becomes the active a
 
 ### Why This Matters
 
-This allows the MCP server to behave as a design system abstraction layer rather than a thin wrapper around one UI library.
+This allows the project to behave as a design system abstraction layer rather than a thin wrapper around one UI library.
 
 It also avoids mixing multiple design systems during search and generation, which reduces component conflicts and improves recommendation accuracy.
 
 By storing only token references instead of raw token values in metadata, the design keeps LLM context usage smaller and lets each adapter manage token sources flexibly.
 
-### Differentiation
+## 8. CLI Command Definitions
 
-This project is not just reusing an existing MCP implementation. It is designed for real product environments where internal and external design systems are mixed.
-
-It supports multiple design systems as an abstraction, while still focusing on exactly one active design system at runtime for more accurate results.
-
-## 8. MCP Tool Definitions
-
-### search_components(query)
+### search
 
 Description:
 
@@ -419,20 +435,11 @@ Search related components based on the current active adapter.
 
 Example:
 
-```json
-{
-  "adapter": "shadcn",
-  "query": "input for login"
-}
+```bash
+ds-ai search --adapter shadcn "input for login"
 ```
 
-Result:
-
-```json
-["Input", "PasswordInput"]
-```
-
-### recommend_components(pageType)
+### recommend
 
 Description:
 
@@ -440,20 +447,11 @@ Recommend components for a page goal based on the current active adapter.
 
 Example:
 
-```json
-{
-  "adapter": "custom",
-  "pageType": "profile page"
-}
+```bash
+ds-ai recommend --adapter custom "profile page"
 ```
 
-Result:
-
-```json
-["Avatar", "Input", "Button"]
-```
-
-### generate_ui(description)
+### generate
 
 Description:
 
@@ -461,50 +459,35 @@ Generate UI code based on the current active adapter.
 
 Example:
 
-```json
-{
-  "adapter": "company",
-  "description": "profile edit screen"
-}
-```
-
-Result:
-
-```tsx
-<Card>
-  <Avatar />
-  <Input />
-  <Button>Save</Button>
-</Card>
+```bash
+ds-ai generate --adapter company "profile edit screen"
 ```
 
 ## 9. Demo Scenario
 
-User selects a design system
+The user selects a design system.
 
-Example: shadcn
-
-↓
-
-User enters a prompt
-
-Create a login page
+Example: custom
 
 ↓
 
-MCP tools are called
+The user runs a CLI command.
+
+```bash
+ds-ai generate --adapter custom "login page"
+```
 
 ↓
 
-Components are searched and recommended based on the selected adapter
+Components are searched and recommended based on the selected adapter.
 
 ↓
 
-React code is generated
+React code is generated.
 
 ↓
 
-The demo app renders the result
+The demo app renders the result.
 
 ## 10. Technology Stack
 
@@ -514,11 +497,16 @@ The demo app renders the result
 - TypeScript
 - Next.js
 
+### CLI
+
+- Node.js
+- Commander.js
+
 ### Design System
 
 - Storybook
 - Tailwind CSS
-- Figma Variables (for custom/company adapter token sources)
+- Figma Variables
 
 ### Infra
 
@@ -529,65 +517,26 @@ The demo app renders the result
 ### AI Layer
 
 - OpenAI API
-- Embedding Search (optional)
-
-### MCP
-
-- Model Context Protocol SDK
 
 ### Monitoring
 
 - Sentry
 
-Use Sentry to track the runtime status of the MCP server and demo application.
-
-- web-demo: track UI rendering errors
-- mcp-server: track tool execution failures and adapter errors
-
-Record the active adapter and tool name as tags so issues can be traced back to the exact environment.
-
-## Shared Timeline
-
-| Phase | Duration | Goal | Main Deliverables |
-| --- | --- | --- | --- |
-| Phase 1 | Week 1 | Project structure and core data design | monorepo setup, ui package, metadata schema, adapter interface |
-| Phase 2 | Week 2 | MCP tool MVP implementation | working search / recommend / generate tools |
-| Phase 3 | Week 3 | Demo app integration and end-to-end flow | prompt input -> tool call -> UI rendering |
-| Phase 4 | Week 4 | Structural hardening and operations support | adapter extension structure, monitoring, README |
-
-## Detailed Goals by Phase
-
-| Phase | Details |
-| --- | --- |
-| Phase 1 | Turborepo packages/apps setup, custom UI components, component metadata design |
-| Phase 2 | active adapter based component search / recommendation / UI generation |
-| Phase 3 | adapter selection, prompt input, and generated UI rendering in web-demo |
-| Phase 4 | extension-friendly adapter structure, Sentry integration, documentation |
-
-## Expected MVP Timing
-
-```text
-End-to-end MVP completion in 2 to 3 weeks, assuming 4 hours of available time per day
-```
-
-The timeline may extend depending on available time.
-
 ## Planned Extensions
 
-| Item | Description |
-| --- | --- |
-| Search improvement | keyword based -> semantic search |
-| Adapter expansion | custom -> shadcn / company adapter |
-| Metadata automation | manual authoring -> docs-based extraction |
-| Design token integration | connect adapter-specific token sources |
+| Item                | Description                        |
+| ------------------- | ---------------------------------- |
+| MCP interface       | wrap the core logic as MCP tools   |
+| Search improvement  | keyword based -> semantic search   |
+| Adapter expansion   | custom -> shadcn / company adapter |
+| Metadata automation | docs-based extraction              |
 
 ## Current Execution Strategy
 
 ```text
 Initially focus on one custom design system,
-stabilize the metadata-driven tool flow first,
-then expand adapters and improve search incrementally.
+validate the CLI-based search / recommend / generate flow first.
 
-Keep only token references in metadata,
-and separate actual token sources by adapter and design system structure.
+Once the core logic is stable,
+extend the same core through an MCP interface.
 ```
