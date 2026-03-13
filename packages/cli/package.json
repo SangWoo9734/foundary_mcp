@@ -1,0 +1,30 @@
+{
+  "name": "@repo/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ds-ai": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "lint": "tsc --noEmit",
+    "recommend": "tsx src/index.ts recommend",
+    "search": "tsx src/index.ts search",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist tsconfig.build.tsbuildinfo"
+  },
+  "dependencies": {
+    "@repo/core": "workspace:*",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}
