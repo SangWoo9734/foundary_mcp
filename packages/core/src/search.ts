@@ -7,6 +7,10 @@ export function searchComponents(query: string): SearchResult[] {
   const normalizedQuery = normalizeQuery(query);
   const queryTokens = normalizeText(query);
 
+  if (queryTokens.length === 0) {
+    return [];
+  }
+
   return searchableComponents
     .map((component) =>
       scoreComponent(component, {
@@ -15,6 +19,6 @@ export function searchComponents(query: string): SearchResult[] {
         normalizedQuery
       })
     )
-    .filter((result) => result.score > 0)
+    .filter((result) => result.score >= 12)
     .sort((left, right) => right.score - left.score);
 }
