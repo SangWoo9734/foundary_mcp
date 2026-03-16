@@ -1,5 +1,7 @@
 import type { ComponentMetadata } from "@repo/ai-metadata";
 
+export type ResultPriority = "high" | "medium" | "low";
+
 export type MatchResult = {
   component: ComponentMetadata;
   score: number;
