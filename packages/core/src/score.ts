@@ -60,7 +60,7 @@ export function scoreComponent(
 
   if (mode === "recommend") {
     if (component.category === "form") {
-      score += 6;
+      score += 2;
       reasons.push("form composition bias");
     }
 

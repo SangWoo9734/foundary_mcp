@@ -54,8 +54,8 @@ export const SCENARIO_RULES: Record<RecommendScenario, ScenarioRule> = {
     categoryBias: {
       input: 16,
       icon: 4,
-      action: 0,
-      form: 0,
+      action: -2,
+      form: -8,
       layout: -2,
       surface: -2
     },
