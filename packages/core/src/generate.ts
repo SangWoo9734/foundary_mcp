@@ -5,6 +5,7 @@ import type { GenerateResult } from "./types.js";
 function createLoginPageResult(query: string): GenerateResult {
   return {
     query,
+    status: "ok",
     selectedComponents: ["Form", "Input", "Input", "Button"],
     jsx: `<Form>
   <Input placeholder="Email" />
@@ -22,6 +23,7 @@ function createLoginPageResult(query: string): GenerateResult {
 function createProfileEditResult(query: string): GenerateResult {
   return {
     query,
+    status: "ok",
     selectedComponents: ["Layout", "Card", "Form", "Input", "Input", "Button"],
     jsx: `<Layout title="Profile Edit">
   <Card title="Edit Profile">
@@ -44,6 +46,7 @@ function createProfileEditResult(query: string): GenerateResult {
 function createSearchFieldResult(query: string): GenerateResult {
   return {
     query,
+    status: "ok",
     selectedComponents: ["Input", "Icon"],
     jsx: `<Input placeholder="Search..." leadingIcon="search" />`,
     rationale: [
@@ -56,6 +59,7 @@ function createSearchFieldResult(query: string): GenerateResult {
 function createFallbackResult(query: string): GenerateResult {
   return {
     query,
+    status: "fallback",
     selectedComponents: ["Layout", "Card", "Button"],
     jsx: `<Layout title="Generated UI">
   <Card title="Suggested Section">

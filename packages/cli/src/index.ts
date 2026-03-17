@@ -3,15 +3,15 @@
 import { Command } from "commander";
 import { generateUI, recommendComponents, searchComponents } from "@repo/core";
 import {
-  formatLegacyResults,
+  createGenerateEnvelope,
   formatGenerateJson,
   formatGenerateText,
-  formatSearchJson,
-  formatSearchText,
+  formatSearchLikeJson,
+  formatSearchLikeText,
   type OutputFormat
 } from "./format.js";
 
-type SearchCommandOptions = {
+type CommandOptions = {
   adapter: string;
   format: OutputFormat;
 };
@@ -38,25 +38,36 @@ program
   .option("--adapter <name>", "design system adapter", "custom")
   .option("--format <type>", "output format: text or json", "text")
   .argument("<query>", "natural language search query")
-  .action((query: string, options: SearchCommandOptions) => {
+  .action((query: string, options: CommandOptions) => {
     validateAdapter(options.adapter);
     const results = searchComponents(query);
 
     if (options.format === "json") {
-      console.log(formatSearchJson(query, options.adapter, results));
+      console.log(formatSearchLikeJson("search", query, options.adapter, results));
       return;
     }
 
-    console.log(formatSearchText(results));
+    console.log(formatSearchLikeText("search", query, options.adapter, results));
   });
 
 program
   .command("recommend")
   .description("Recommend components for a page or flow")
-  .argument("<pageType>", "page or flow description")
-  .action((pageType: string) => {
-    const results = recommendComponents(pageType);
-    console.log(formatLegacyResults(results));
+  .option("--adapter <name>", "design system adapter", "custom")
+  .option("--format <type>", "output format: text or json", "text")
+  .argument("<query>", "natural language recommendation query")
+  .action((query: string, options: CommandOptions) => {
+    validateAdapter(options.adapter);
+    const results = recommendComponents(query);
+
+    if (options.format === "json") {
+      console.log(formatSearchLikeJson("recommend", query, options.adapter, results));
+      return;
+    }
+
+    console.log(
+      formatSearchLikeText("recommend", query, options.adapter, results)
+    );
   });
 
 program
@@ -65,9 +76,9 @@ program
   .option("--adapter <name>", "design system adapter", "custom")
   .option("--format <type>", "output format: text or json", "text")
   .argument("<query>", "natural language generation query")
-  .action((query: string, options: SearchCommandOptions) => {
+  .action((query: string, options: CommandOptions) => {
     validateAdapter(options.adapter);
-    const result = generateUI(query);
+    const result = createGenerateEnvelope(query, options.adapter, generateUI(query));
 
     if (options.format === "json") {
       console.log(formatGenerateJson(result));

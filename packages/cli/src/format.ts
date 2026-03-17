@@ -1,5 +1,10 @@
 import { toPriority } from "@repo/core";
-import type { GenerateResult, MatchResult, ResultPriority } from "@repo/core";
+import type {
+  CommandStatus,
+  GenerateResult,
+  MatchResult,
+  ResultPriority
+} from "@repo/core";
 
 export type OutputFormat = "text" | "json";
 
@@ -11,18 +16,25 @@ export type FormattedResult = {
   reasons: string[];
 };
 
-export function formatLegacyResults(results: MatchResult[]): string {
-  if (results.length === 0) {
-    return "No components matched the query.";
-  }
+export type SearchLikeCommand = "search" | "recommend";
 
-  return results
-    .map(
-      (result, index) =>
-        `${index + 1}. ${result.component.name} (score: ${result.score})\n   ${result.component.description}\n   reasons: ${result.reasons.join(", ")}`
-    )
-    .join("\n");
-}
+type SearchLikeEnvelope = {
+  command: SearchLikeCommand;
+  adapter: string;
+  query: string;
+  status: CommandStatus;
+  results: FormattedResult[];
+};
+
+type GenerateEnvelope = {
+  command: "generate";
+  adapter: string;
+  query: string;
+  status: CommandStatus;
+  selectedComponents: string[];
+  jsx: string;
+  rationale: string[];
+};
 
 export function toFormattedResults(results: MatchResult[]): FormattedResult[] {
   return results.map((result) => ({
@@ -34,34 +46,84 @@ export function toFormattedResults(results: MatchResult[]): FormattedResult[] {
   }));
 }
 
-export function formatSearchText(results: MatchResult[]): string {
-  if (results.length === 0) {
+function inferStatus(results: MatchResult[]): CommandStatus {
+  return results.length === 0 ? "no_match" : "ok";
+}
+
+export function createSearchLikeEnvelope(
+  command: SearchLikeCommand,
+  query: string,
+  adapter: string,
+  results: MatchResult[]
+): SearchLikeEnvelope {
+  return {
+    command,
+    adapter,
+    query,
+    status: inferStatus(results),
+    results: toFormattedResults(results)
+  };
+}
+
+export function createGenerateEnvelope(
+  query: string,
+  adapter: string,
+  result: GenerateResult
+): GenerateEnvelope {
+  return {
+    command: "generate",
+    adapter,
+    query,
+    status: result.status,
+    selectedComponents: result.selectedComponents,
+    jsx: result.jsx,
+    rationale: result.rationale
+  };
+}
+
+export function formatSearchLikeText(
+  command: SearchLikeCommand,
+  query: string,
+  adapter: string,
+  results: MatchResult[]
+): string {
+  const envelope = createSearchLikeEnvelope(command, query, adapter, results);
+
+  if (envelope.status === "no_match") {
     return "No components matched the query.";
   }
 
-  return toFormattedResults(results)
-    .map(
+  return [
+    `command: ${envelope.command}`,
+    `adapter: ${envelope.adapter}`,
+    `query: ${envelope.query}`,
+    `status: ${envelope.status}`,
+    ...envelope.results.map(
       (result, index) =>
         `${index + 1}. ${result.name}\n   priority: ${result.priority}\n   category: ${result.category}\n   ${result.description}\n   reasons: ${result.reasons.join(", ")}`
     )
-    .join("\n");
+  ].join("\n");
 }
 
-export function formatSearchJson(query: string, adapter: string, results: MatchResult[]): string {
+export function formatSearchLikeJson(
+  command: SearchLikeCommand,
+  query: string,
+  adapter: string,
+  results: MatchResult[]
+): string {
   return JSON.stringify(
-    {
-      query,
-      adapter,
-      results: toFormattedResults(results)
-    },
+    createSearchLikeEnvelope(command, query, adapter, results),
     null,
     2
   );
 }
 
-export function formatGenerateText(result: GenerateResult): string {
+export function formatGenerateText(result: GenerateEnvelope): string {
   return [
+    `command: ${result.command}`,
+    `adapter: ${result.adapter}`,
     `query: ${result.query}`,
+    `status: ${result.status}`,
     `selected components: ${result.selectedComponents.join(", ")}`,
     "jsx:",
     result.jsx,
@@ -70,6 +132,6 @@ export function formatGenerateText(result: GenerateResult): string {
   ].join("\n");
 }
 
-export function formatGenerateJson(result: GenerateResult): string {
+export function formatGenerateJson(result: GenerateEnvelope): string {
   return JSON.stringify(result, null, 2);
 }

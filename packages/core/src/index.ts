@@ -5,6 +5,7 @@ export { scoreComponent } from "./score.js";
 export { searchComponents } from "./search.js";
 export { toPriority } from "./priority.js";
 export type {
+  CommandStatus,
   GenerateResult,
   MatchResult,
   RecommendationResult,
