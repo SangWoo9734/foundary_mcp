@@ -320,6 +320,200 @@ ds-ai recommend --adapter custom "login page"
    reasons: submit action
 ```
 
+### 7.6 recommend 설계 방향
+
+recommend는 search와 달리 "관련 있는 후보"를 찾는 데서 끝나지 않고, 실제 화면 구성에 필요한 핵심 컴포넌트를 우선적으로 제안해야 한다고 판단했다.
+
+따라서 recommend는 단순 relevance ranking이 아니라, 다음 세 층을 함께 고려하는 구조로 본다.
+
+- 단어 기반
+- 의미 기반
+- UX 기반
+
+#### 단어 기반
+
+기존 metadata의 `name`, `keywords`, `useCases`, `category`, `description`을 활용해 query와 직접적으로 관련 있는 컴포넌트를 찾는다.
+
+이 단계는 search와 가장 가까운 부분이며, 관련성이 아예 없는 컴포넌트를 제외하는 baseline 역할을 한다.
+
+#### 의미 기반
+
+query를 매우 세부적인 시나리오로 잘게 나누기보다, 몇 개의 큰 intent 수준으로 해석하는 것이 적절하다고 판단했다.
+
+예:
+
+- `auth`
+- `form-edit`
+- `search`
+
+이렇게 coarse-grained한 수준으로만 유지한 이유는, recommend가 지나치게 정답표처럼 보이는 것을 피하고 이후 AI 도입 시 의미 해석 층을 자연스럽게 교체하거나 보강할 수 있도록 하기 위해서다.
+
+즉 지금 단계에서는 세부 시나리오를 계속 추가하는 것보다, 몇 개의 대표적인 intent 그룹만 유지하는 쪽이 더 적절하다고 보았다.
+
+#### UX 기반
+
+recommend에서 가장 중요한 기준은 "이 query에서 사용자가 어떤 행동을 하려는가"라고 판단했다.
+
+예:
+
+- `login page` -> 입력 + 제출
+- `profile edit` -> 수정 + 저장
+- `search field` -> 입력 + 탐색
+
+즉 query를 해석할 때 단순히 단어를 매칭하는 것보다, 어떤 UX 역할이 필요한지로 해석해야 실제 조합 가능한 추천 결과가 나온다고 판단했다.
+
+### 7.7 시나리오를 바라보는 현재 관점
+
+현재 recommend에서 사용 중인 시나리오는 "정답을 고정하는 테이블"이 아니라, 반복적으로 등장하는 UI 패턴을 구조화하기 위한 임시 기준으로 본다.
+
+즉 시나리오의 목적은 아래와 같다.
+
+- query를 완벽히 이해했다고 주장하는 것
+- 특정 컴포넌트에 직접 정답 점수를 주는 것
+
+이 아니라,
+
+- 현재 custom 디자인 시스템에서 자주 나오는 화면 패턴을 드러내고
+- 해당 패턴에 필요한 UI 역할을 정리하며
+- 추천 결과를 설명 가능한 형태로 만드는 것
+
+에 있다.
+
+이 때문에 시나리오는 query 하나마다 늘리는 방식이 아니라, 대표적인 intent 그룹 수준에서만 유지하는 것이 맞다고 판단했다.
+
+### 7.8 recommend 구현에서의 현재 우선순위
+
+현재 단계에서 recommend의 목표는 "충분히 똑똑한 추천"이 아니라, "왜 이 결과가 나왔는지 설명 가능한 추천 로직"을 만드는 것이다.
+
+즉 지금 단계에서 중요하게 보는 것은 다음과 같다.
+
+- query를 어떤 층으로 해석하는가
+- 어떤 UX 역할이 필요한가
+- 각 컴포넌트가 어떤 역할을 수행하는가
+- 추천 결과를 사람이 납득할 수 있는가
+
+반대로 지금 단계에서 아직 확정하지 않는 것은 다음과 같다.
+
+- semantic retrieval 구조
+- embedding 기반 검색
+- LLM intent classification
+- LLM reranking
+
+이 항목들은 현재 단계의 구현 범위를 넓히기보다, 이후 최종 단계에서 다시 검토할 백로그 항목으로 남기는 것이 더 적절하다고 판단했다.
+
+### 7.9 AI 도입 관련 현재 판단
+
+recommend에 AI를 적용하는 방향은 장기적으로 유효하다고 보지만, 현재는 도입 시점을 미루는 것이 맞다고 판단했다.
+
+그 이유는 다음과 같다.
+
+- 현재는 recommend가 어떤 논리로 동작해야 하는지 baseline을 먼저 만들어야 한다.
+- AI를 너무 일찍 붙이면 metadata 구조의 문제와 query 해석의 문제를 분리해서 보기 어렵다.
+- 현재 단계에서는 rule-based recommend가 설명 가능성과 디버깅 측면에서 더 유리하다.
+
+따라서 현재 recommend는 다음 범위까지만 구현한다.
+
+- query의 coarse intent 해석
+- UX 역할 기반 추천
+- supporting component 감점
+- 사람이 설명 가능한 추천 결과
+
+그리고 다음 항목은 백로그로 관리한다.
+
+- intent classification에 대한 LLM 보강
+- semantic retrieval 도입
+- rule-based + LLM reranking 결합
+- generation 단계에서의 LLM 기반 조합 개선
+
+## 8. generate 구성 기준
+
+### 8.1 현재 generate를 바라보는 기준
+
+현재 단계에서 generate의 목표는 "자유로운 UI 생성"이 아니라, 추천 가능한 컴포넌트 세트를 실제 화면 구조로 번역하는 baseline을 만드는 것이다.
+
+즉 지금 generate는 창의적인 조합보다, 설명 가능한 조합 규칙을 먼저 검증하는 단계로 본다.
+
+### 8.2 현재 generate의 논리 흐름
+
+현재 generate는 다음 흐름으로 동작하도록 본다.
+
+1. query를 해석한다.
+2. query가 어떤 UI 패턴인지 판단한다.
+3. 해당 패턴에 필요한 UX 역할을 정리한다.
+4. 역할을 만족하는 최소 컴포넌트 세트를 선택한다.
+5. 그 세트를 고정된 JSX 템플릿에 배치한다.
+
+즉 현재 generate는 rule-based template composition에 가깝다.
+
+### 8.3 현재 단계에서 composition 기준을 이렇게 잡은 이유
+
+현재는 generate 품질을 최대화하기보다, metadata와 recommendation의 결과가 실제 조합 가능한 구조로 이어질 수 있는지를 먼저 검증하는 것이 더 중요하다고 판단했다.
+
+이 때문에 다음 기준을 우선했다.
+
+- 최소 완성 구조를 먼저 만든다.
+- query에 필요한 역할을 충족하는 컴포넌트 세트를 우선한다.
+- 결과를 사람이 설명할 수 있어야 한다.
+
+즉 현재 generate의 핵심은 "예쁘게 생성하는 것"보다 "왜 이 조합이 나왔는지 설명 가능한 것"에 있다.
+
+### 8.4 현재 composition 기준의 예시
+
+예를 들어 `login page`의 경우 다음과 같이 본다.
+
+- 필요한 역할:
+  - grouped input
+  - entry field
+  - primary action
+
+- 선택되는 컴포넌트:
+  - `Form`
+  - `Input`
+  - `Input`
+  - `Button`
+
+예를 들어 `profile edit`의 경우 다음과 같이 본다.
+
+- 필요한 역할:
+  - page structure
+  - content group
+  - grouped input
+  - editable field
+  - primary action
+
+- 선택되는 컴포넌트:
+  - `Layout`
+  - `Card`
+  - `Form`
+  - `Input`
+  - `Input`
+  - `Button`
+
+즉 지금은 query에서 바로 JSX를 생성하는 것이 아니라, 역할을 거쳐 최소 조합을 만든 뒤 템플릿에 넣는 방식으로 본다.
+
+### 8.5 현재 generate의 한계
+
+현재 구조는 다음 한계를 갖는다.
+
+- 템플릿이 고정적이다.
+- 다양한 화면을 유연하게 생성하기 어렵다.
+- 추천 결과를 동적으로 재조합하는 수준은 아니다.
+- props나 variant 선택이 정교하지 않다.
+
+하지만 현재 단계에서는 이 한계를 감수하는 것이 맞다고 판단했다.
+
+왜냐하면 지금은 먼저 generate의 논리 구조를 고정하는 것이 중요하고, 유연성 확대는 이후 단계에서 다루는 것이 더 적절하기 때문이다.
+
+### 8.6 이후 확장 방향
+
+향후 generate는 다음 방향으로 확장될 수 있다.
+
+- query -> intent -> required roles -> component set -> template selection
+- recommendation 결과를 동적으로 composition에 반영
+- semantic retrieval이나 LLM을 통해 조합 후보를 더 유연하게 생성
+
+다만 현재 단계에서는 이 확장 방향을 실제 구현으로 가져가기보다, 백로그로 남기고 현재의 설명 가능한 template composition baseline을 유지하는 쪽이 맞다고 판단했다.
+
 ### 7.6 generate 정의
 
 #### 목적
