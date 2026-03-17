@@ -1,5 +1,5 @@
 import { toPriority } from "@repo/core";
-import type { MatchResult, ResultPriority } from "@repo/core";
+import type { GenerateResult, MatchResult, ResultPriority } from "@repo/core";
 
 export type OutputFormat = "text" | "json";
 
@@ -57,4 +57,19 @@ export function formatSearchJson(query: string, adapter: string, results: MatchR
     null,
     2
   );
+}
+
+export function formatGenerateText(result: GenerateResult): string {
+  return [
+    `query: ${result.query}`,
+    `selected components: ${result.selectedComponents.join(", ")}`,
+    "jsx:",
+    result.jsx,
+    "rationale:",
+    ...result.rationale.map((reason, index) => `${index + 1}. ${reason}`)
+  ].join("\n");
+}
+
+export function formatGenerateJson(result: GenerateResult): string {
+  return JSON.stringify(result, null, 2);
 }

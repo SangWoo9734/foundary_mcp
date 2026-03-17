@@ -10,3 +10,10 @@ export type MatchResult = {
 
 export type SearchResult = MatchResult;
 export type RecommendationResult = MatchResult;
+
+export type GenerateResult = {
+  query: string;
+  selectedComponents: string[];
+  jsx: string;
+  rationale: string[];
+};

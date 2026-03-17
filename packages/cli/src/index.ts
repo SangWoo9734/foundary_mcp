@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { recommendComponents, searchComponents } from "@repo/core";
+import { generateUI, recommendComponents, searchComponents } from "@repo/core";
 import {
   formatLegacyResults,
+  formatGenerateJson,
+  formatGenerateText,
   formatSearchJson,
   formatSearchText,
   type OutputFormat
@@ -55,6 +57,24 @@ program
   .action((pageType: string) => {
     const results = recommendComponents(pageType);
     console.log(formatLegacyResults(results));
+  });
+
+program
+  .command("generate")
+  .description("Generate a UI composition from the active custom design system")
+  .option("--adapter <name>", "design system adapter", "custom")
+  .option("--format <type>", "output format: text or json", "text")
+  .argument("<query>", "natural language generation query")
+  .action((query: string, options: SearchCommandOptions) => {
+    validateAdapter(options.adapter);
+    const result = generateUI(query);
+
+    if (options.format === "json") {
+      console.log(formatGenerateJson(result));
+      return;
+    }
+
+    console.log(formatGenerateText(result));
   });
 
 program.parse();
