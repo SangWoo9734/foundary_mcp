@@ -12,6 +12,51 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values));
 }
 
+function applyQueryShapeBias(
+  queryTokens: string[],
+  result: RecommendationResult
+): RecommendationResult {
+  let score = result.score;
+  const reasons = [...result.reasons];
+
+  const isPageQuery = queryTokens.some((token) =>
+    ["page", "screen", "layout"].includes(token)
+  );
+  const isSectionQuery = queryTokens.some((token) =>
+    ["section", "card", "panel"].includes(token)
+  );
+
+  if (isPageQuery) {
+    if (result.component.name === "Layout") {
+      score += 18;
+      reasons.push("page-level query prefers explicit layout structure");
+    }
+
+    if (result.component.name === "Card") {
+      score += 6;
+      reasons.push("page-level query may group content with cards");
+    }
+  }
+
+  if (isSectionQuery) {
+    if (result.component.name === "Card") {
+      score += 18;
+      reasons.push("section-level query prefers grouped card content");
+    }
+
+    if (result.component.name === "Form" && queryTokens.includes("form")) {
+      score += 10;
+      reasons.push("section-level query may use a form block");
+    }
+  }
+
+  return {
+    ...result,
+    score,
+    reasons: unique(reasons)
+  };
+}
+
 export function recommendComponents(query: string): RecommendationResult[] {
   const normalizedQuery = normalizeQuery(query);
   const queryTokens = normalizeText(query);
@@ -58,6 +103,7 @@ export function recommendComponents(query: string): RecommendationResult[] {
         reasons: unique(reasons)
       };
     })
+    .map((result) => applyQueryShapeBias(queryTokens, result))
     .filter((result) => result.score >= 18)
     .sort((left, right) => right.score - left.score);
 }

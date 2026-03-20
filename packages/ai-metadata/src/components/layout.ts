@@ -6,7 +6,7 @@ export const layoutMetadata: ComponentMetadata = {
   description:
     "Page-level structure component that sets the layout grid, header area, and spacing rhythm.",
   props: ["eyebrow", "title", "description", "children"],
-  useCases: ["page shell", "screen scaffold", "dashboard section", "content layout"],
+  useCases: ["page shell", "screen scaffold", "dashboard section", "content layout", "page layout"],
   keywords: [
     "layout",
     "page",
@@ -14,7 +14,8 @@ export const layoutMetadata: ComponentMetadata = {
     "screen",
     "container",
     "section",
-    "page shell"
+    "page shell",
+    "page layout"
   ],
   relatedComponents: ["Card", "Button"],
   tokens: {

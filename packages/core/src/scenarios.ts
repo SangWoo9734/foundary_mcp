@@ -23,7 +23,7 @@ type RoleRule = {
 
 const SCENARIO_TRIGGERS: Record<RecommendScenario, string[]> = {
   auth: ["auth", "login", "signin", "sign", "signup", "register", "password"],
-  "form-edit": ["edit", "profile", "settings", "update", "account"],
+  "form-edit": ["edit", "profile", "update", "account"],
   search: ["search", "find", "filter"]
 };
 

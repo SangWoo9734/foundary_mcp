@@ -10,6 +10,13 @@ type GenerateTemplate = {
   rationale: string[];
 };
 
+type DirectGenerateMatch = {
+  tokens: string[];
+  selectedComponents: string[];
+  jsx: string;
+  rationale: string[];
+};
+
 function hasRecommendationSupport(
   recommendations: RecommendationResult[],
   requiredComponents: string[]
@@ -40,6 +47,90 @@ function createFallbackResult(query: string): GenerateResult {
       "This keeps the output composable even when the query does not match a known scenario."
     ]
   };
+}
+
+const DIRECT_GENERATE_MATCHES: DirectGenerateMatch[] = [
+  {
+    tokens: ["password", "input"],
+    selectedComponents: ["Input"],
+    jsx: `<Input placeholder="Password" trailingIcon="eye" />`,
+    rationale: [
+      "This query asks for a single password input component.",
+      "The generated result stays at component level rather than expanding to a full page."
+    ]
+  },
+  {
+    tokens: ["button", "submit"],
+    selectedComponents: ["Button"],
+    jsx: `<Button type="submit">Submit</Button>`,
+    rationale: [
+      "This query asks for a single submit action component.",
+      "The generated result stays at component level so it can be reused in a larger flow."
+    ]
+  },
+  {
+    tokens: ["page", "layout"],
+    selectedComponents: ["Layout", "Card"],
+    jsx: `<Layout title="Page Title">
+  <Card title="Section Title">
+    Content
+  </Card>
+</Layout>`,
+    rationale: [
+      "This query asks for page-level structure rather than a full feature flow.",
+      "Layout is used as the primary shell and Card is shown inside the layout scaffold."
+    ]
+  },
+  {
+    tokens: ["profile", "card"],
+    selectedComponents: ["Card"],
+    jsx: `<Card title="Profile">
+  Profile details
+</Card>`,
+    rationale: [
+      "This query asks for a grouped profile content block.",
+      "The generated result stays focused on the card-level surface component."
+    ]
+  },
+  {
+    tokens: ["form", "section"],
+    selectedComponents: ["Card", "Form", "Input", "Button"],
+    jsx: `<Card title="Form Section">
+  <Form>
+    <Input placeholder="Field value" />
+    <Button type="submit">Submit</Button>
+  </Form>
+</Card>`,
+    rationale: [
+      "This query asks for a section-level form block rather than a full page.",
+      "Card groups the section and Form keeps the input and action together."
+    ]
+  }
+];
+
+function createDirectGenerateResult(
+  query: string,
+  selectedComponents: string[],
+  jsx: string,
+  rationale: string[]
+): GenerateResult {
+  return {
+    query,
+    status: "ok",
+    selectedComponents,
+    jsx,
+    rationale
+  };
+}
+
+function matchDirectGenerate(tokens: string[]): DirectGenerateMatch | null {
+  for (const candidate of DIRECT_GENERATE_MATCHES) {
+    if (candidate.tokens.every((token) => tokens.includes(token))) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 const GENERATE_TEMPLATES: Record<"auth" | "form-edit" | "search", GenerateTemplate> = {
@@ -110,6 +201,17 @@ function createScenarioResult(
 
 export function generateUI(query: string): GenerateResult {
   const tokens = normalizeText(query);
+  const directMatch = matchDirectGenerate(tokens);
+
+  if (directMatch) {
+    return createDirectGenerateResult(
+      query,
+      directMatch.selectedComponents,
+      directMatch.jsx,
+      directMatch.rationale
+    );
+  }
+
   const scenarios = detectScenarios(tokens);
   const recommendations = recommendComponents(query);
 

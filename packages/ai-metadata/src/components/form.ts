@@ -9,14 +9,15 @@ export const formMetadata: ComponentMetadata = {
   useCases: [
     "login form",
     "profile edit",
-    "settings form",
     "validated form",
-    "field grouping"
+    "field grouping",
+    "form section"
   ],
   keywords: [
     "form",
     "field group",
     "form layout",
+    "form section",
     "label",
     "message",
     "validation",

@@ -6,14 +6,21 @@ export const cardMetadata: ComponentMetadata = {
   description:
     "Elevated content container for grouping related information inside a rounded surface.",
   props: ["title", "description", "children"],
-  useCases: ["content group", "summary block", "panel", "information section"],
+  useCases: [
+    "content group",
+    "summary block",
+    "panel",
+    "information section",
+    "profile card"
+  ],
   keywords: [
     "card",
     "panel",
     "surface",
     "container",
     "summary",
-    "content block"
+    "content block",
+    "profile card"
   ],
   relatedComponents: ["Layout", "Button"],
   tokens: {
