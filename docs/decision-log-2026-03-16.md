@@ -258,6 +258,25 @@ ds-ai generate "login page"
 - `priority`
 - `reasons`
 
+## 8. 대표 Query와 현재 지원 범위
+
+`search / recommend / generate`를 점검할 때 사용할 대표 query 세트와 현재 지원 범위는 별도 문서로 정리한다.
+
+- [예시 Query 세트](/Users/sangwoo/foundary_mcp/docs/example-query-set.md)
+
+이 문서를 따로 둔 이유는 다음과 같다.
+
+- 현재 baseline에서 무엇을 지원한다고 볼지 명확히 하기 위해
+- 이후 AI 도입 전후를 같은 query 세트로 비교하기 위해
+- expected behavior를 코드와 분리해 추적하기 위해
+
+현재 기준에서는 특히 다음 판단을 반영한다.
+
+- `page / section / component` 단위는 서로 다른 기대 결과를 가진다.
+- `profile edit` 같은 query에서는 반복 입력 개수를 정답으로 고정하지 않는다.
+- `search field`에서 `Icon`은 optional 요소로 본다.
+- `settings form`, `user list`, `dashboard section`은 현재 baseline의 대표 지원 범위에서 제외한다.
+
 #### 예시
 
 ```bash
