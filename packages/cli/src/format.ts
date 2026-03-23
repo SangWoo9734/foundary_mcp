@@ -24,6 +24,7 @@ type SearchLikeEnvelope = {
   query: string;
   status: CommandStatus;
   results: FormattedResult[];
+  meta?: Record<string, string>;
 };
 
 type GenerateEnvelope = {
@@ -54,14 +55,16 @@ export function createSearchLikeEnvelope(
   command: SearchLikeCommand,
   query: string,
   adapter: string,
-  results: MatchResult[]
+  results: MatchResult[],
+  meta?: Record<string, string>
 ): SearchLikeEnvelope {
   return {
     command,
     adapter,
     query,
     status: inferStatus(results),
-    results: toFormattedResults(results)
+    results: toFormattedResults(results),
+    meta
   };
 }
 
@@ -85,19 +88,26 @@ export function formatSearchLikeText(
   command: SearchLikeCommand,
   query: string,
   adapter: string,
-  results: MatchResult[]
+  results: MatchResult[],
+  meta?: Record<string, string>
 ): string {
-  const envelope = createSearchLikeEnvelope(command, query, adapter, results);
+  const envelope = createSearchLikeEnvelope(command, query, adapter, results, meta);
 
   if (envelope.status === "no_match") {
     return "No components matched the query.";
   }
+
+  const metaLines =
+    envelope.meta && Object.keys(envelope.meta).length > 0
+      ? Object.entries(envelope.meta).map(([key, value]) => `${key}: ${value}`)
+      : [];
 
   return [
     `command: ${envelope.command}`,
     `adapter: ${envelope.adapter}`,
     `query: ${envelope.query}`,
     `status: ${envelope.status}`,
+    ...metaLines,
     ...envelope.results.map(
       (result, index) =>
         `${index + 1}. ${result.name}\n   priority: ${result.priority}\n   category: ${result.category}\n   ${result.description}\n   reasons: ${result.reasons.join(", ")}`
@@ -109,10 +119,11 @@ export function formatSearchLikeJson(
   command: SearchLikeCommand,
   query: string,
   adapter: string,
-  results: MatchResult[]
+  results: MatchResult[],
+  meta?: Record<string, string>
 ): string {
   return JSON.stringify(
-    createSearchLikeEnvelope(command, query, adapter, results),
+    createSearchLikeEnvelope(command, query, adapter, results, meta),
     null,
     2
   );

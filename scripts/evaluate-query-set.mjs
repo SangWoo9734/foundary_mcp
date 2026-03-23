@@ -31,19 +31,22 @@ const CASES = [
     command: "recommend",
     query: "login page",
     status: "ok",
-    mustInclude: ["Form", "Input", "Button"]
+    mustInclude: ["Form", "Input", "Button"],
+    args: ["--mode", "rule"]
   },
   {
     command: "recommend",
     query: "profile edit",
     status: "ok",
-    mustInclude: ["Layout", "Card", "Form", "Input", "Button"]
+    mustInclude: ["Layout", "Card", "Form", "Input", "Button"],
+    args: ["--mode", "rule"]
   },
   {
     command: "recommend",
     query: "search field",
     status: "ok",
-    mustInclude: ["Input"]
+    mustInclude: ["Input"],
+    args: ["--mode", "rule"]
   },
   {
     command: "generate",
@@ -73,12 +76,22 @@ const CASES = [
     command: "recommend",
     query: "user list",
     status: "no_match",
-    mustInclude: []
+    mustInclude: [],
+    args: ["--mode", "rule"]
   }
 ];
 
-function runCli(command, query) {
-  const args = [cliEntry, command, "--adapter", "custom", "--format", "json", query];
+function runCli(command, query, extraArgs = []) {
+  const args = [
+    cliEntry,
+    command,
+    "--adapter",
+    "custom",
+    "--format",
+    "json",
+    ...extraArgs,
+    query
+  ];
   const result = spawnSync(process.execPath, args, {
     cwd: workspaceRoot,
     encoding: "utf8"
@@ -104,7 +117,7 @@ function extractNames(payload, command) {
 let failed = 0;
 
 for (const testCase of CASES) {
-  const payload = runCli(testCase.command, testCase.query);
+  const payload = runCli(testCase.command, testCase.query, testCase.args ?? []);
   const names = extractNames(payload, testCase.command);
 
   const statusOk = payload.status === testCase.status;
