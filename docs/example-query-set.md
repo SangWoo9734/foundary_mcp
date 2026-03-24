@@ -6,12 +6,12 @@
 
 이 문서는 현재 단계의 `search / recommend / generate` 검증에 사용할 대표 query와 기대 결과를 정리하기 위한 문서다.
 
-지금 정리하는 예시 데이터는 단순 데모 문장이 아니라, 이후 AI 도입 시에도 계속 사용할 baseline evaluation set으로 본다.
+지금 정리하는 예시 데이터는 단순 데모 문장이 아니라, AI 품질 개선 과정에서 계속 사용할 baseline evaluation set으로 본다.
 
 즉 이 문서는 다음 용도로 사용한다.
 
-- 현재 rule-based baseline 검증
-- 이후 AI/semantic layer 도입 전후 비교
+- 현재 AI-primary baseline 검증
+- AI prompt/retrieval 개선 전후 비교
 - expected behavior spec 정리
 - prompt example 또는 evaluation fixture의 초안
 
@@ -22,7 +22,7 @@
 따라서 다음 기준으로 범위를 제한한다.
 
 - 지원 대상은 현재 구현된 핵심 컴포넌트와 직접 연결되는 query에 한정한다.
-- `settings form`, `user list`, `dashboard section`처럼 현재 baseline에서 의미가 덜 명확한 query는 대표 지원 범위에서 제외한다.
+- `settings form`, `dashboard section`처럼 현재 baseline에서 의미가 덜 명확한 query는 대표 지원 범위에서 제외한다.
 - `generate`는 완성 기능이 아니라 러프한 퍼블리싱을 가능하게 하는 수준의 조합 결과를 제공하는 것으로 본다.
 
 ## 3. 평가 기준
@@ -82,15 +82,15 @@ query는 의미적으로 다음 세 층으로 나눠서 본다.
 | query | 제외 이유 | 현재 기대 동작 |
 | --- | --- | --- |
 | `settings form` | 단일 form submission보다 setting item 처리 의미가 강해 현재 baseline 범위와 다름 | 현재 단계에서는 evaluation set에서 제외 |
-| `user list` | list / collection display는 현재 rule-based baseline이 직접 다루는 범위를 벗어남 | `recommend`는 `no_match`, `generate`는 `fallback` 허용 |
+| `user list` | list / collection display는 전용 리스트 컴포넌트 부재로 품질 변동이 큼 | AI/fallback 조합으로 근사 결과를 허용하되 품질 개선 대상 |
 | `dashboard section` | display/dashboard 계열은 이후 확장 범위로 보는 것이 더 적절함 | 현재 단계에서는 evaluation set에서 제외 |
 
 ## 6. 이후 활용 방식
 
 이 query 세트는 이후 다음 단계에서 그대로 재사용한다.
 
-- rule tuning 전/후 비교
-- AI intent classification 도입 전/후 비교
+- AI prompt tuning 전/후 비교
+- AI component selection 품질 비교
 - semantic retrieval 도입 전/후 비교
 - generate quality 회귀 테스트
 
