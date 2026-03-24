@@ -7,12 +7,13 @@ export { toPriority } from "./priority.js";
 export type {
   AIProvider,
   CommandStatus,
+  GenerateOptions,
   GenerateResult,
   MatchResult,
+  QueryTypeHint,
   RecommendComponentsOptions,
   RecommendComponentsOutput,
   RecommendIntentSource,
-  RecommendMode,
   RecommendationResult,
   ResultPriority,
   SearchResult

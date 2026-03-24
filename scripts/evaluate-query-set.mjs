@@ -31,22 +31,19 @@ const CASES = [
     command: "recommend",
     query: "login page",
     status: "ok",
-    mustInclude: ["Form", "Input", "Button"],
-    args: ["--mode", "rule"]
+    mustInclude: ["Form", "Input", "Button"]
   },
   {
     command: "recommend",
     query: "profile edit",
     status: "ok",
-    mustInclude: ["Layout", "Card", "Form", "Input", "Button"],
-    args: ["--mode", "rule"]
+    mustInclude: ["Layout", "Card", "Form", "Input", "Button"]
   },
   {
     command: "recommend",
     query: "search field",
     status: "ok",
-    mustInclude: ["Input"],
-    args: ["--mode", "rule"]
+    mustInclude: ["Input"]
   },
   {
     command: "generate",
@@ -71,13 +68,6 @@ const CASES = [
     query: "page layout",
     status: "ok",
     mustInclude: ["Layout", "Card"]
-  },
-  {
-    command: "recommend",
-    query: "user list",
-    status: "no_match",
-    mustInclude: [],
-    args: ["--mode", "rule"]
   }
 ];
 

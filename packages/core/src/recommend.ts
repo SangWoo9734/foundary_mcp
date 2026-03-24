@@ -1,13 +1,7 @@
 import { searchableComponents } from "@repo/ai-metadata";
-import { resolveIntentScenariosWithAI } from "./ai-intent.js";
+import { resolveRecommendationsWithAI } from "./ai-intent.js";
 import { normalizeQuery, normalizeText } from "./normalize.js";
 import { scoreComponent } from "./score.js";
-import {
-  detectScenarios,
-  type RecommendScenario,
-  ROLE_RULES,
-  SCENARIO_RULES
-} from "./scenarios.js";
 import type {
   RecommendComponentsOptions,
   RecommendComponentsOutput,
@@ -18,108 +12,28 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values));
 }
 
-const UNSUPPORTED_PATTERN_TOKENS = [
-  "list",
-  "table",
-  "dashboard",
-  "collection",
-  "grid"
-];
-
-const SUPPORTED_ANCHOR_TOKENS = [
-  "login",
-  "auth",
-  "password",
-  "search",
-  "input",
-  "form",
-  "button",
-  "profile",
-  "edit",
-  "layout",
-  "card",
-  "section",
-  "page"
-];
-
-function isUnsupportedPatternQuery(queryTokens: string[]): boolean {
-  const hasUnsupportedPattern = queryTokens.some((token) =>
-    UNSUPPORTED_PATTERN_TOKENS.includes(token)
-  );
-
-  if (!hasUnsupportedPattern) {
-    return false;
-  }
-
-  const hasSupportedAnchor = queryTokens.some((token) =>
-    SUPPORTED_ANCHOR_TOKENS.includes(token)
-  );
-
-  return !hasSupportedAnchor;
-}
-
-function applyQueryShapeBias(
+function rankRecommendations(
+  normalizedQuery: string,
   queryTokens: string[],
-  result: RecommendationResult
-): RecommendationResult {
-  let score = result.score;
-  const reasons = [...result.reasons];
-
+  aiSelectedComponents: string[] = []
+): RecommendationResult[] {
+  const aiPreferred = new Set(aiSelectedComponents);
   const isPageQuery = queryTokens.some((token) =>
     ["page", "screen", "layout"].includes(token)
   );
   const isSectionQuery = queryTokens.some((token) =>
-    ["section", "card", "panel"].includes(token)
+    ["section", "card", "block"].includes(token)
+  );
+  const isAuthLikeQuery = queryTokens.some((token) =>
+    ["login", "auth", "password", "signin", "signup"].includes(token)
+  );
+  const isEditLikeQuery = queryTokens.some((token) =>
+    ["edit", "profile", "update", "account"].includes(token)
+  );
+  const isSearchLikeQuery = queryTokens.some((token) =>
+    ["search", "find", "filter"].includes(token)
   );
 
-  if (isPageQuery) {
-    if (result.component.name === "Layout") {
-      score += 18;
-      reasons.push("page-level query prefers explicit layout structure");
-    }
-
-    if (result.component.name === "Card") {
-      score += 6;
-      reasons.push("page-level query may group content with cards");
-    }
-  }
-
-  if (isSectionQuery) {
-    if (result.component.name === "Card") {
-      score += 18;
-      reasons.push("section-level query prefers grouped card content");
-    }
-
-    if (result.component.name === "Form" && queryTokens.includes("form")) {
-      score += 10;
-      reasons.push("section-level query may use a form block");
-    }
-  }
-
-  return {
-    ...result,
-    score,
-    reasons: unique(reasons)
-  };
-}
-
-export function recommendComponents(query: string): RecommendationResult[] {
-  const normalizedQuery = normalizeQuery(query);
-  const queryTokens = normalizeText(query);
-  const scenarios = detectScenarios(queryTokens);
-
-  if (isUnsupportedPatternQuery(queryTokens)) {
-    return [];
-  }
-
-  return rankRecommendations(normalizedQuery, queryTokens, scenarios);
-}
-
-function rankRecommendations(
-  normalizedQuery: string,
-  queryTokens: string[],
-  scenarios: RecommendScenario[]
-): RecommendationResult[] {
   return searchableComponents
     .map((component) =>
       scoreComponent(component, {
@@ -132,88 +46,91 @@ function rankRecommendations(
       let score = result.score;
       const reasons = [...result.reasons];
 
-      for (const scenario of scenarios) {
-        const rule = SCENARIO_RULES[scenario];
-        const categoryBias = rule.categoryBias[result.component.category] ?? 0;
-
-        score += categoryBias;
-
-        for (const role of rule.roles) {
-          const roleRule = ROLE_RULES[role];
-          const roleBias = roleRule.componentBias[result.component.name] ?? 0;
-          score += roleBias;
-
-          const reason = roleRule.reasons[result.component.name];
-          if (reason && roleBias > 0) {
-            reasons.push(reason);
-          }
+      if (!aiPreferred.has(result.component.name)) {
+        if (isPageQuery && result.component.name === "Layout") {
+          score += 18;
+          reasons.push("page-level query favors layout shell");
         }
-      }
 
-      if (result.component.category === "icon") {
-        score -= 12;
-        reasons.push("supporting component penalty");
+        if (isSectionQuery && result.component.name === "Card") {
+          score += 16;
+          reasons.push("section-level query favors grouped card surface");
+        }
+
+        if (isAuthLikeQuery && ["Form", "Input", "Button"].includes(result.component.name)) {
+          score += 12;
+          reasons.push("auth-like query favors input flow composition");
+        }
+
+        if (
+          isEditLikeQuery &&
+          ["Layout", "Card", "Form", "Input", "Button"].includes(result.component.name)
+        ) {
+          score += 10;
+          reasons.push("edit-like query favors structured form editing flow");
+        }
+
+        if (isSearchLikeQuery && result.component.name === "Icon") {
+          score -= 4;
+          reasons.push("icon is optional for search-style interaction");
+        }
+
+        if (result.component.category === "icon") {
+          score -= 6;
+          reasons.push("supporting component penalty");
+        }
+
+        return {
+          ...result,
+          score,
+          reasons: unique(reasons)
+        };
       }
 
       return {
         ...result,
-        score,
-        reasons: unique(reasons)
+        score: score + 40,
+        reasons: unique([...reasons, "selected by AI intent"])
       };
     })
-    .map((result) => applyQueryShapeBias(queryTokens, result))
-    .filter((result) => result.score >= 18)
     .sort((left, right) => right.score - left.score);
+}
+
+export function recommendComponents(query: string): RecommendationResult[] {
+  const normalizedQuery = normalizeQuery(query);
+  const queryTokens = normalizeText(query);
+  return rankRecommendations(normalizedQuery, queryTokens);
 }
 
 export async function recommendComponentsWithMode(
   query: string,
   options: RecommendComponentsOptions = {}
 ): Promise<RecommendComponentsOutput> {
-  const mode = options.mode ?? "rule";
   const provider = options.provider ?? "gemini";
   const model =
     options.model ?? (provider === "gemini" ? "gemini-2.0-flash" : "gpt-5-mini");
   const normalizedQuery = normalizeQuery(query);
   const queryTokens = normalizeText(query);
-  const ruleScenarios = detectScenarios(queryTokens);
 
-  if (isUnsupportedPatternQuery(queryTokens)) {
+  const aiIntent = await resolveRecommendationsWithAI(query, { model, provider });
+
+  if (aiIntent.recommendedComponents.length > 0) {
     return {
-      results: [],
-      mode,
-      intentSource: "fallback",
-      provider,
-      model,
-      note:
-        "This query pattern is outside the current custom baseline (list/table/dashboard)."
-    };
-  }
-
-  if (mode === "rule") {
-    return {
-      results: rankRecommendations(normalizedQuery, queryTokens, ruleScenarios),
-      mode,
-      intentSource: "rule",
-      provider
-    };
-  }
-
-  const aiIntent = await resolveIntentScenariosWithAI(query, { model, provider });
-
-  if (aiIntent.scenarios.length > 0) {
-    return {
-      results: rankRecommendations(normalizedQuery, queryTokens, aiIntent.scenarios),
-      mode,
+      results: rankRecommendations(
+        normalizedQuery,
+        queryTokens,
+        aiIntent.recommendedComponents
+      ),
       intentSource: "ai",
       provider,
-      model
+      model,
+      queryType: aiIntent.queryType,
+      rationale: aiIntent.rationale
     };
   }
 
   return {
-    results: rankRecommendations(normalizedQuery, queryTokens, ruleScenarios),
-    mode,
+    results: rankRecommendations(normalizedQuery, queryTokens),
     intentSource: "fallback",
     provider,
     model,

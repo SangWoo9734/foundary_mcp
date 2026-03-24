@@ -35,6 +35,7 @@ type GenerateEnvelope = {
   selectedComponents: string[];
   jsx: string;
   rationale: string[];
+  meta?: Record<string, string>;
 };
 
 export function toFormattedResults(results: MatchResult[]): FormattedResult[] {
@@ -73,6 +74,28 @@ export function createGenerateEnvelope(
   adapter: string,
   result: GenerateResult
 ): GenerateEnvelope {
+  const meta: Record<string, string> = {};
+
+  if (result.meta?.intentSource) {
+    meta.intentSource = result.meta.intentSource;
+  }
+
+  if (result.meta?.provider) {
+    meta.provider = result.meta.provider;
+  }
+
+  if (result.meta?.model) {
+    meta.model = result.meta.model;
+  }
+
+  if (result.meta?.queryType) {
+    meta.queryType = result.meta.queryType;
+  }
+
+  if (result.meta?.note) {
+    meta.note = result.meta.note;
+  }
+
   return {
     command: "generate",
     adapter,
@@ -80,7 +103,8 @@ export function createGenerateEnvelope(
     status: result.status,
     selectedComponents: result.selectedComponents,
     jsx: result.jsx,
-    rationale: result.rationale
+    rationale: result.rationale,
+    meta: Object.keys(meta).length > 0 ? meta : undefined
   };
 }
 
@@ -130,11 +154,17 @@ export function formatSearchLikeJson(
 }
 
 export function formatGenerateText(result: GenerateEnvelope): string {
+  const metaLines =
+    result.meta && Object.keys(result.meta).length > 0
+      ? Object.entries(result.meta).map(([key, value]) => `${key}: ${value}`)
+      : [];
+
   return [
     `command: ${result.command}`,
     `adapter: ${result.adapter}`,
     `query: ${result.query}`,
     `status: ${result.status}`,
+    ...metaLines,
     `selected components: ${result.selectedComponents.join(", ")}`,
     "jsx:",
     result.jsx,

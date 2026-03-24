@@ -1,231 +1,232 @@
 import { normalizeText } from "./normalize.js";
-import { recommendComponents } from "./recommend.js";
-import { detectScenarios } from "./scenarios.js";
-import type { RecommendationResult } from "./types.js";
-import type { GenerateResult } from "./types.js";
+import { recommendComponentsWithMode } from "./recommend.js";
+import type {
+  GenerateOptions,
+  GenerateResult,
+  QueryTypeHint,
+  RecommendationResult
+} from "./types.js";
 
-type GenerateTemplate = {
-  requiredComponents: string[];
-  jsx: string;
-  rationale: string[];
-};
+function buildSelectedComponents(
+  queryType: QueryTypeHint,
+  queryTokens: string[],
+  results: RecommendationResult[]
+): string[] {
+  const ranked = Array.from(new Set(results.map((result) => result.component.name)));
+  const available = new Set(ranked);
+  const selected: string[] = [];
 
-type DirectGenerateMatch = {
-  tokens: string[];
-  selectedComponents: string[];
-  jsx: string;
-  rationale: string[];
-};
+  function pick(name: string): void {
+    if (available.has(name) && !selected.includes(name)) {
+      selected.push(name);
+    }
+  }
 
-function hasRecommendationSupport(
-  recommendations: RecommendationResult[],
-  requiredComponents: string[]
-): boolean {
-  const recommendedNames = new Set(
-    recommendations.map((result) => result.component.name)
-  );
-  const uniqueRequired = Array.from(new Set(requiredComponents));
-  const supportedCount = uniqueRequired.filter((name) =>
-    recommendedNames.has(name)
-  ).length;
+  if (queryType === "page") {
+    pick("Layout");
+    pick("Card");
+    if (queryTokens.some((token) => ["login", "auth", "edit", "profile", "form"].includes(token))) {
+      pick("Form");
+      pick("Input");
+      pick("Button");
+    } else {
+      pick("Input");
+      pick("Button");
+    }
+  }
 
-  return supportedCount >= Math.max(1, uniqueRequired.length - 1);
+  if (queryType === "section") {
+    pick("Card");
+    pick("Form");
+    pick("Input");
+    pick("Button");
+  }
+
+  if (queryType === "component") {
+    if (queryTokens.includes("password")) {
+      pick("Input");
+      pick("Icon");
+    } else if (queryTokens.includes("search")) {
+      pick("Input");
+      pick("Icon");
+    } else if (queryTokens.includes("button") || queryTokens.includes("submit")) {
+      pick("Button");
+    } else {
+      pick("Input");
+      pick("Button");
+      pick("Card");
+    }
+  }
+
+  for (const name of ranked) {
+    if (selected.length >= 5) {
+      break;
+    }
+
+    pick(name);
+  }
+
+  return selected.slice(0, 5);
 }
 
-function createFallbackResult(query: string): GenerateResult {
-  return {
-    query,
-    status: "fallback",
-    selectedComponents: ["Layout", "Card", "Button"],
-    jsx: `<Layout title="Generated UI">
+function inferQueryTypeFromTokens(tokens: string[]): QueryTypeHint {
+  if (tokens.some((token) => ["page", "screen", "layout"].includes(token))) {
+    return "page";
+  }
+
+  if (tokens.some((token) => ["section", "card", "block"].includes(token))) {
+    return "section";
+  }
+
+  return "component";
+}
+
+function buildComponentLevelJsx(query: string, selected: Set<string>): string {
+  const lower = query.toLowerCase();
+
+  if (selected.has("Input") && lower.includes("password")) {
+    return `<Input placeholder="Password" trailingIcon="eye" />`;
+  }
+
+  if (selected.has("Input") && lower.includes("search")) {
+    return `<Input placeholder="Search..." leadingIcon="search" />`;
+  }
+
+  if (selected.has("Button") && !selected.has("Input") && !selected.has("Form")) {
+    return `<Button type="button">Action</Button>`;
+  }
+
+  if (selected.has("Card") && !selected.has("Form")) {
+    return `<Card title="Card">
+  Content
+</Card>`;
+  }
+
+  if (selected.has("Input")) {
+    return `<Input placeholder="Value" />`;
+  }
+
+  return `<Button type="button">Continue</Button>`;
+}
+
+function buildSectionLevelJsx(selected: Set<string>): string {
+  const inputBlock = selected.has("Input")
+    ? `    <Input placeholder="Field value" />\n`
+    : "";
+  const actionBlock = selected.has("Button")
+    ? `    <Button type="submit">Submit</Button>\n`
+    : "";
+  const formBlock = selected.has("Form")
+    ? `<Form>\n${inputBlock}${actionBlock}  </Form>`
+    : `<Card title="Section">\n  Content\n</Card>`;
+
+  if (selected.has("Card")) {
+    return `<Card title="Section">
+  ${formBlock.replace(/\n/g, "\n  ")}
+</Card>`;
+  }
+
+  return formBlock;
+}
+
+function buildPageLevelJsx(selected: Set<string>): string {
+  const section = buildSectionLevelJsx(selected);
+
+  if (selected.has("Layout")) {
+    return `<Layout title="Generated Page">
+  ${section.replace(/\n/g, "\n  ")}
+</Layout>`;
+  }
+
+  return section;
+}
+
+function buildRationale(
+  queryType: QueryTypeHint,
+  selectedComponents: string[],
+  aiRationale: string[],
+  intentSource: "ai" | "fallback"
+): string[] {
+  const rationale = [...aiRationale];
+
+  if (rationale.length === 0) {
+    rationale.push(
+      intentSource === "ai"
+        ? "The component selection was provided by the AI intent layer."
+        : "AI intent was unavailable, so metadata matching was used as fallback."
+    );
+  }
+
+  rationale.push(`Query type interpreted as ${queryType}.`);
+  rationale.push(
+    `Generated composition is built from: ${selectedComponents.join(", ")}.`
+  );
+
+  return rationale.slice(0, 5);
+}
+
+export async function generateUI(
+  query: string,
+  options: GenerateOptions = {}
+): Promise<GenerateResult> {
+  const recommendation = await recommendComponentsWithMode(query, options);
+  const tokens = normalizeText(query);
+  const inferredType = recommendation.queryType ?? inferQueryTypeFromTokens(tokens);
+  const selectedComponents = buildSelectedComponents(
+    inferredType,
+    tokens,
+    recommendation.results
+  );
+
+  if (selectedComponents.length === 0) {
+    return {
+      query,
+      status: "fallback",
+      selectedComponents: ["Layout", "Card", "Button"],
+      jsx: `<Layout title="Generated UI">
   <Card title="Suggested Section">
     <Button>Continue</Button>
   </Card>
 </Layout>`,
-    rationale: [
-      "A generic fallback uses structure, grouped content, and a primary action.",
-      "This keeps the output composable even when the query does not match a known scenario."
-    ]
-  };
-}
-
-const DIRECT_GENERATE_MATCHES: DirectGenerateMatch[] = [
-  {
-    tokens: ["password", "input"],
-    selectedComponents: ["Input"],
-    jsx: `<Input placeholder="Password" trailingIcon="eye" />`,
-    rationale: [
-      "This query asks for a single password input component.",
-      "The generated result stays at component level rather than expanding to a full page."
-    ]
-  },
-  {
-    tokens: ["button", "submit"],
-    selectedComponents: ["Button"],
-    jsx: `<Button type="submit">Submit</Button>`,
-    rationale: [
-      "This query asks for a single submit action component.",
-      "The generated result stays at component level so it can be reused in a larger flow."
-    ]
-  },
-  {
-    tokens: ["page", "layout"],
-    selectedComponents: ["Layout", "Card"],
-    jsx: `<Layout title="Page Title">
-  <Card title="Section Title">
-    Content
-  </Card>
-</Layout>`,
-    rationale: [
-      "This query asks for page-level structure rather than a full feature flow.",
-      "Layout is used as the primary shell and Card is shown inside the layout scaffold."
-    ]
-  },
-  {
-    tokens: ["profile", "card"],
-    selectedComponents: ["Card"],
-    jsx: `<Card title="Profile">
-  Profile details
-</Card>`,
-    rationale: [
-      "This query asks for a grouped profile content block.",
-      "The generated result stays focused on the card-level surface component."
-    ]
-  },
-  {
-    tokens: ["form", "section"],
-    selectedComponents: ["Card", "Form", "Input", "Button"],
-    jsx: `<Card title="Form Section">
-  <Form>
-    <Input placeholder="Field value" />
-    <Button type="submit">Submit</Button>
-  </Form>
-</Card>`,
-    rationale: [
-      "This query asks for a section-level form block rather than a full page.",
-      "Card groups the section and Form keeps the input and action together."
-    ]
+      rationale: [
+        "No reliable component match was found for this query.",
+        "A minimal layout/card/button scaffold is returned as a safe fallback."
+      ],
+      meta: {
+        intentSource: recommendation.intentSource,
+        provider: recommendation.provider,
+        model: recommendation.model,
+        queryType: inferredType,
+        note: recommendation.note
+      }
+    };
   }
-];
 
-function createDirectGenerateResult(
-  query: string,
-  selectedComponents: string[],
-  jsx: string,
-  rationale: string[]
-): GenerateResult {
+  const selectedSet = new Set(selectedComponents);
+  const jsx =
+    inferredType === "page"
+      ? buildPageLevelJsx(selectedSet)
+      : inferredType === "section"
+        ? buildSectionLevelJsx(selectedSet)
+        : buildComponentLevelJsx(query, selectedSet);
+
   return {
     query,
     status: "ok",
     selectedComponents,
     jsx,
-    rationale
-  };
-}
-
-function matchDirectGenerate(tokens: string[]): DirectGenerateMatch | null {
-  for (const candidate of DIRECT_GENERATE_MATCHES) {
-    if (candidate.tokens.every((token) => tokens.includes(token))) {
-      return candidate;
+    rationale: buildRationale(
+      inferredType,
+      selectedComponents,
+      recommendation.rationale ?? [],
+      recommendation.intentSource
+    ),
+    meta: {
+      intentSource: recommendation.intentSource,
+      provider: recommendation.provider,
+      model: recommendation.model,
+      queryType: inferredType,
+      note: recommendation.note
     }
-  }
-
-  return null;
-}
-
-const GENERATE_TEMPLATES: Record<"auth" | "form-edit" | "search", GenerateTemplate> = {
-  auth: {
-    requiredComponents: ["Form", "Input", "Input", "Button"],
-    jsx: `<Form>
-  <Input placeholder="Email" />
-  <Input placeholder="Password" trailingIcon="eye" />
-  <Button type="submit">Login</Button>
-</Form>`,
-    rationale: [
-      "The generation starts from the recommended authentication component set.",
-      "Form is needed to group the authentication fields.",
-      "Two Input components are needed for email and password.",
-      "Button is needed for the primary submit action."
-    ]
-  },
-  "form-edit": {
-    requiredComponents: ["Layout", "Card", "Form", "Input", "Input", "Button"],
-    jsx: `<Layout title="Profile Edit">
-  <Card title="Edit Profile">
-    <Form>
-      <Input placeholder="Full name" />
-      <Input placeholder="Email address" />
-      <Button type="submit">Save Changes</Button>
-    </Form>
-  </Card>
-</Layout>`,
-    rationale: [
-      "The generation starts from the recommended edit-flow component set.",
-      "Layout provides the page-level structure for an edit flow.",
-      "Card groups the editable content into a clear section.",
-      "Form and Input components handle structured profile updates.",
-      "Button completes the save action."
-    ]
-  },
-  search: {
-    requiredComponents: ["Input", "Icon"],
-    jsx: `<Input placeholder="Search..." leadingIcon="search" />`,
-    rationale: [
-      "The generation starts from the recommended search interaction components.",
-      "Input is the primary interaction for search.",
-      "Icon is used as a supporting search affordance."
-    ]
-  }
-};
-
-function createScenarioResult(
-  query: string,
-  scenario: "auth" | "form-edit" | "search",
-  recommendations: RecommendationResult[]
-): GenerateResult {
-  const template = GENERATE_TEMPLATES[scenario];
-  const selectedComponents = [...template.requiredComponents];
-
-  if (!hasRecommendationSupport(recommendations, template.requiredComponents)) {
-    return createFallbackResult(query);
-  }
-
-  return {
-    query,
-    status: "ok",
-    selectedComponents,
-    jsx: template.jsx,
-    rationale: template.rationale
   };
-}
-
-export function generateUI(query: string): GenerateResult {
-  const tokens = normalizeText(query);
-  const directMatch = matchDirectGenerate(tokens);
-
-  if (directMatch) {
-    return createDirectGenerateResult(
-      query,
-      directMatch.selectedComponents,
-      directMatch.jsx,
-      directMatch.rationale
-    );
-  }
-
-  const scenarios = detectScenarios(tokens);
-  const recommendations = recommendComponents(query);
-
-  if (scenarios.includes("auth")) {
-    return createScenarioResult(query, "auth", recommendations);
-  }
-
-  if (scenarios.includes("form-edit")) {
-    return createScenarioResult(query, "form-edit", recommendations);
-  }
-
-  if (scenarios.includes("search")) {
-    return createScenarioResult(query, "search", recommendations);
-  }
-
-  return createFallbackResult(query);
 }

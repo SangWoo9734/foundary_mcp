@@ -1,5 +1,6 @@
-import type { RecommendScenario } from "./scenarios.js";
-import type { AIProvider } from "./types.js";
+import { searchableComponents } from "@repo/ai-metadata";
+import type { AIProvider, QueryTypeHint } from "./types.js";
+import { buildIntentPrompt } from "./ai-prompt.js";
 
 type ResolveIntentOptions = {
   provider?: AIProvider;
@@ -7,21 +8,56 @@ type ResolveIntentOptions = {
   timeoutMs?: number;
 };
 
-type ResolveIntentResult = {
-  scenarios: RecommendScenario[];
+export type ResolveIntentResult = {
+  recommendedComponents: string[];
+  queryType: QueryTypeHint;
+  rationale: string[];
   reason?: string;
 };
 
-const ALLOWED_SCENARIOS: RecommendScenario[] = ["auth", "form-edit", "search"];
+const ALLOWED_COMPONENT_NAMES = new Set(
+  searchableComponents.map((component) => component.name)
+);
 
-function parseScenarioArray(value: unknown): RecommendScenario[] {
+const ALLOWED_QUERY_TYPES: QueryTypeHint[] = ["component", "section", "page"];
+
+function sanitizeReason(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function sanitizeRationale(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.filter((item): item is RecommendScenario =>
-    ALLOWED_SCENARIOS.includes(item as RecommendScenario)
-  );
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 5);
+}
+
+function sanitizeQueryType(value: unknown): QueryTypeHint {
+  if (typeof value === "string" && ALLOWED_QUERY_TYPES.includes(value as QueryTypeHint)) {
+    return value as QueryTypeHint;
+  }
+
+  return "component";
+}
+
+function sanitizeRecommendedComponents(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => ALLOWED_COMPONENT_NAMES.has(item))
+    )
+  ).slice(0, 5);
 }
 
 function extractText(payload: any): string {
@@ -58,16 +94,8 @@ function extractJsonObject(text: string): string | null {
   return text.slice(start, end + 1);
 }
 
-function buildIntentInstruction(query: string): string {
-  return [
-    'Classify UI intent and return only strict JSON: {"scenarios":["auth"|"form-edit"|"search"]}.',
-    "Include only allowed values. If uncertain, return an empty array.",
-    `Query: ${query}`
-  ].join("\n");
-}
-
 async function callOpenAI(
-  query: string,
+  prompt: { system: string; user: string },
   model: string,
   signal: AbortSignal
 ): Promise<Response> {
@@ -89,12 +117,11 @@ async function callOpenAI(
       input: [
         {
           role: "system",
-          content:
-            'Classify UI intent. Return only JSON: {"scenarios":[...]} with values from ["auth","form-edit","search"].'
+          content: prompt.system
         },
         {
           role: "user",
-          content: query
+          content: prompt.user
         }
       ]
     })
@@ -102,7 +129,7 @@ async function callOpenAI(
 }
 
 async function callGemini(
-  query: string,
+  prompt: { system: string; user: string },
   model: string,
   signal: AbortSignal
 ): Promise<Response> {
@@ -124,14 +151,14 @@ async function callGemini(
       contents: [
         {
           role: "user",
-          parts: [{ text: buildIntentInstruction(query) }]
+          parts: [{ text: `${prompt.system}\n\n${prompt.user}` }]
         }
       ]
     })
   });
 }
 
-export async function resolveIntentScenariosWithAI(
+export async function resolveRecommendationsWithAI(
   query: string,
   options: ResolveIntentOptions = {}
 ): Promise<ResolveIntentResult> {
@@ -141,17 +168,20 @@ export async function resolveIntentScenariosWithAI(
   const timeoutMs = options.timeoutMs ?? 5000;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const prompt = buildIntentPrompt(query);
 
   try {
     const response =
       provider === "gemini"
-        ? await callGemini(query, model, controller.signal)
-        : await callOpenAI(query, model, controller.signal);
+        ? await callGemini(prompt, model, controller.signal)
+        : await callOpenAI(prompt, model, controller.signal);
 
     if (!response.ok) {
       return {
-        scenarios: [],
-        reason: `AI intent request failed (${provider}, ${response.status})`
+        recommendedComponents: [],
+        queryType: "component",
+        rationale: [],
+        reason: `AI recommendation request failed (${provider}, ${response.status})`
       };
     }
 
@@ -161,29 +191,46 @@ export async function resolveIntentScenariosWithAI(
 
     if (!rawJson) {
       return {
-        scenarios: [],
-        reason: `AI intent response did not include JSON (${provider})`
+        recommendedComponents: [],
+        queryType: "component",
+        rationale: [],
+        reason: `AI recommendation response did not include JSON (${provider})`
       };
     }
 
     const parsed = JSON.parse(rawJson);
-    const scenarios = parseScenarioArray(parsed?.scenarios);
+    const recommendedComponents = sanitizeRecommendedComponents(
+      parsed?.recommendedComponents
+    );
+    const rationale = sanitizeRationale(parsed?.rationale);
+    const queryType = sanitizeQueryType(parsed?.queryType);
+    const reason = sanitizeReason(parsed?.reason);
 
-    if (scenarios.length === 0) {
+    if (recommendedComponents.length === 0) {
       return {
-        scenarios: [],
-        reason: `AI intent response returned no supported scenarios (${provider})`
+        recommendedComponents: [],
+        queryType,
+        rationale,
+        reason:
+          reason ??
+          `AI recommendation returned no valid components from allow-list (${provider})`
       };
     }
 
-    return { scenarios };
+    return {
+      recommendedComponents,
+      queryType,
+      rationale
+    };
   } catch (error) {
     return {
-      scenarios: [],
+      recommendedComponents: [],
+      queryType: "component",
+      rationale: [],
       reason:
         error instanceof Error
-          ? `AI intent error (${provider}): ${error.message}`
-          : `AI intent error (${provider})`
+          ? `AI recommendation error (${provider}): ${error.message}`
+          : `AI recommendation error (${provider})`
     };
   } finally {
     clearTimeout(timeout);

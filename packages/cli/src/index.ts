@@ -7,8 +7,7 @@ import {
   generateUI,
   recommendComponentsWithMode,
   searchComponents,
-  type AIProvider,
-  type RecommendMode
+  type AIProvider
 } from "@repo/core";
 import {
   createGenerateEnvelope,
@@ -25,13 +24,11 @@ type CommandOptions = {
 };
 
 type RecommendCommandOptions = CommandOptions & {
-  mode?: string;
   model?: string;
   provider?: string;
 };
 
-type GlobalRecommendOptions = {
-  mode?: string;
+type GlobalAIOptions = {
   model?: string;
   provider?: string;
 };
@@ -75,14 +72,6 @@ function loadDotEnvLocal(): void {
   }
 }
 
-function validateRecommendMode(mode: string): asserts mode is RecommendMode {
-  if (!["rule", "hybrid", "ai"].includes(mode)) {
-    throw new Error(
-      `Unsupported mode "${mode}". Allowed values: "rule", "hybrid", "ai".`
-    );
-  }
-}
-
 function validateProvider(provider: string): asserts provider is AIProvider {
   if (!["gemini", "openai"].includes(provider)) {
     throw new Error(
@@ -97,9 +86,8 @@ loadDotEnvLocal();
 program
   .name("ds-ai")
   .description("CLI for design-system metadata search and recommendation")
-  .option("--mode <type>", "global recommendation mode: rule, hybrid, or ai")
   .option("--provider <name>", "global AI provider: gemini or openai")
-  .option("--model <name>", "global model for AI intent resolution")
+  .option("--model <name>", "global model for AI calls")
   .showHelpAfterError()
   .version("0.0.0");
 
@@ -126,26 +114,21 @@ program
   .description("Recommend components for a page or flow")
   .option("--adapter <name>", "design system adapter", "custom")
   .option("--format <type>", "output format: text or json", "text")
-  .option("--mode <type>", "recommendation mode override: rule, hybrid, or ai")
   .option("--provider <name>", "AI provider override: gemini or openai")
-  .option("--model <name>", "model override for AI intent resolution")
+  .option("--model <name>", "model override for AI recommendation")
   .argument("<query>", "natural language recommendation query")
   .action(async (query: string, options: RecommendCommandOptions) => {
-    const globalOptions = program.opts<GlobalRecommendOptions>();
+    const globalOptions = program.opts<GlobalAIOptions>();
     validateAdapter(options.adapter);
-    const mode = options.mode ?? globalOptions.mode ?? "hybrid";
     const provider = options.provider ?? globalOptions.provider ?? "gemini";
     const model = options.model ?? globalOptions.model;
-    validateRecommendMode(mode);
     validateProvider(provider);
 
     const output = await recommendComponentsWithMode(query, {
-      mode,
       model,
       provider
     });
     const meta: Record<string, string> = {
-      mode: output.mode,
       intentSource: output.intentSource
     };
 
@@ -159,6 +142,10 @@ program
 
     if (output.note) {
       meta.note = output.note;
+    }
+
+    if (output.queryType) {
+      meta.queryType = output.queryType;
     }
 
     if (options.format === "json") {
@@ -190,10 +177,20 @@ program
   .description("Generate a UI composition from the active custom design system")
   .option("--adapter <name>", "design system adapter", "custom")
   .option("--format <type>", "output format: text or json", "text")
+  .option("--provider <name>", "AI provider override: gemini or openai")
+  .option("--model <name>", "model override for AI recommendation")
   .argument("<query>", "natural language generation query")
-  .action((query: string, options: CommandOptions) => {
+  .action(async (query: string, options: RecommendCommandOptions) => {
+    const globalOptions = program.opts<GlobalAIOptions>();
     validateAdapter(options.adapter);
-    const result = createGenerateEnvelope(query, options.adapter, generateUI(query));
+    const provider = options.provider ?? globalOptions.provider ?? "gemini";
+    const model = options.model ?? globalOptions.model;
+    validateProvider(provider);
+    const result = createGenerateEnvelope(
+      query,
+      options.adapter,
+      await generateUI(query, { provider, model })
+    );
 
     if (options.format === "json") {
       console.log(formatGenerateJson(result));
