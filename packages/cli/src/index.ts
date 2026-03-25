@@ -148,6 +148,26 @@ program
       meta.queryType = output.queryType;
     }
 
+    if (output.scope) {
+      meta.scope = output.scope;
+    }
+
+    if (typeof output.needsLayout === "boolean") {
+      meta.needsLayout = String(output.needsLayout);
+    }
+
+    if (typeof output.confidence === "number") {
+      meta.confidence = output.confidence.toFixed(2);
+    }
+
+    if (output.strategy) {
+      meta.strategy = output.strategy;
+    }
+
+    if (output.intentTags && output.intentTags.length > 0) {
+      meta.intentTags = output.intentTags.join(",");
+    }
+
     if (options.format === "json") {
       console.log(
         formatSearchLikeJson(

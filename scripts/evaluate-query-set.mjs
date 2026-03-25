@@ -41,9 +41,39 @@ const CASES = [
   },
   {
     command: "recommend",
+    query: "profile section",
+    status: "ok",
+    mustInclude: ["Card"]
+  },
+  {
+    command: "recommend",
+    query: "dashboard page",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
+  },
+  {
+    command: "recommend",
+    query: "dashboard section",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
+  },
+  {
+    command: "recommend",
     query: "search field",
     status: "ok",
     mustInclude: ["Input"]
+  },
+  {
+    command: "recommend",
+    query: "user list",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
+  },
+  {
+    command: "recommend",
+    query: "shopping page with a lot of products",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
   },
   {
     command: "generate",
@@ -65,7 +95,43 @@ const CASES = [
   },
   {
     command: "generate",
+    query: "profile section",
+    status: "ok",
+    mustInclude: ["Card"]
+  },
+  {
+    command: "generate",
     query: "page layout",
+    status: "ok",
+    mustInclude: ["Layout"]
+  },
+  {
+    command: "generate",
+    query: "dashboard page",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
+  },
+  {
+    command: "generate",
+    query: "settings form",
+    status: "ok",
+    mustInclude: ["Card", "Form", "Input", "Button"]
+  },
+  {
+    command: "generate",
+    query: "user list",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
+  },
+  {
+    command: "generate",
+    query: "dashboard section",
+    status: "ok",
+    mustInclude: ["Layout", "Card"]
+  },
+  {
+    command: "generate",
+    query: "shopping page with a lot of products",
     status: "ok",
     mustInclude: ["Layout", "Card"]
   }

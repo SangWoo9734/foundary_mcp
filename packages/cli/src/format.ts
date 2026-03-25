@@ -92,6 +92,26 @@ export function createGenerateEnvelope(
     meta.queryType = result.meta.queryType;
   }
 
+  if (result.meta?.scope) {
+    meta.scope = result.meta.scope;
+  }
+
+  if (typeof result.meta?.needsLayout === "boolean") {
+    meta.needsLayout = String(result.meta.needsLayout);
+  }
+
+  if (typeof result.meta?.confidence === "number") {
+    meta.confidence = result.meta.confidence.toFixed(2);
+  }
+
+  if (result.meta?.strategy) {
+    meta.strategy = result.meta.strategy;
+  }
+
+  if (result.meta?.intentTags && result.meta.intentTags.length > 0) {
+    meta.intentTags = result.meta.intentTags.join(",");
+  }
+
   if (result.meta?.note) {
     meta.note = result.meta.note;
   }

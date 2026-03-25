@@ -1,16 +1,27 @@
 import { searchableComponents } from "@repo/ai-metadata";
-import type { AIProvider, QueryTypeHint } from "./types.js";
+import type {
+  AIProvider,
+  GenerationStrategy,
+  QueryScopeHint,
+  QueryTypeHint
+} from "./types.js";
 import { buildIntentPrompt } from "./ai-prompt.js";
 
 type ResolveIntentOptions = {
   provider?: AIProvider;
   model?: string;
   timeoutMs?: number;
+  maxRetries?: number;
 };
 
 export type ResolveIntentResult = {
   recommendedComponents: string[];
   queryType: QueryTypeHint;
+  scope: QueryScopeHint;
+  needsLayout: boolean;
+  confidence: number;
+  intentTags: string[];
+  strategy: GenerationStrategy;
   rationale: string[];
   reason?: string;
 };
@@ -20,6 +31,18 @@ const ALLOWED_COMPONENT_NAMES = new Set(
 );
 
 const ALLOWED_QUERY_TYPES: QueryTypeHint[] = ["component", "section", "page"];
+const ALLOWED_SCOPES: QueryScopeHint[] = [
+  "component",
+  "standalone_section",
+  "page_section",
+  "page"
+];
+const ALLOWED_STRATEGIES: GenerationStrategy[] = [
+  "single_component",
+  "form_flow",
+  "listing",
+  "scaffold"
+];
 
 function sanitizeReason(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
@@ -43,6 +66,91 @@ function sanitizeQueryType(value: unknown): QueryTypeHint {
   }
 
   return "component";
+}
+
+function sanitizeScope(value: unknown, queryType: QueryTypeHint): QueryScopeHint {
+  if (typeof value === "string" && ALLOWED_SCOPES.includes(value as QueryScopeHint)) {
+    return value as QueryScopeHint;
+  }
+
+  if (queryType === "page") {
+    return "page";
+  }
+
+  if (queryType === "section") {
+    return "standalone_section";
+  }
+
+  return "component";
+}
+
+function sanitizeNeedsLayout(value: unknown, scope: QueryScopeHint): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return scope === "page" || scope === "page_section";
+}
+
+function sanitizeConfidence(value: unknown): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0.65;
+  }
+
+  if (value < 0) {
+    return 0;
+  }
+
+  if (value > 1) {
+    return 1;
+  }
+
+  return value;
+}
+
+function sanitizeIntentTags(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.length >= 2)
+    )
+  ).slice(0, 5);
+}
+
+function sanitizeStrategy(
+  value: unknown,
+  queryType: QueryTypeHint,
+  intentTags: string[]
+): GenerationStrategy {
+  if (typeof value === "string" && ALLOWED_STRATEGIES.includes(value as GenerationStrategy)) {
+    return value as GenerationStrategy;
+  }
+
+  if (
+    intentTags.some((tag) =>
+      ["listing", "products", "catalog", "grid", "commerce"].includes(tag)
+    )
+  ) {
+    return "listing";
+  }
+
+  if (
+    intentTags.some((tag) => ["form", "edit", "auth", "settings", "profile"].includes(tag))
+  ) {
+    return "form_flow";
+  }
+
+  if (queryType === "component") {
+    return "single_component";
+  }
+
+  return "scaffold";
 }
 
 function sanitizeRecommendedComponents(value: unknown): string[] {
@@ -166,73 +274,84 @@ export async function resolveRecommendationsWithAI(
   const model =
     options.model ?? (provider === "gemini" ? "gemini-2.0-flash" : "gpt-5-mini");
   const timeoutMs = options.timeoutMs ?? 5000;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const maxRetries = options.maxRetries ?? 1;
   const prompt = buildIntentPrompt(query);
+  let lastErrorReason: string | undefined;
 
-  try {
-    const response =
-      provider === "gemini"
-        ? await callGemini(prompt, model, controller.signal)
-        : await callOpenAI(prompt, model, controller.signal);
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-      return {
-        recommendedComponents: [],
-        queryType: "component",
-        rationale: [],
-        reason: `AI recommendation request failed (${provider}, ${response.status})`
-      };
-    }
+    try {
+      const response =
+        provider === "gemini"
+          ? await callGemini(prompt, model, controller.signal)
+          : await callOpenAI(prompt, model, controller.signal);
 
-    const payload = await response.json();
-    const rawText = extractText(payload);
-    const rawJson = extractJsonObject(rawText);
+      if (!response.ok) {
+        lastErrorReason = `AI recommendation request failed (${provider}, ${response.status})`;
+        continue;
+      }
 
-    if (!rawJson) {
-      return {
-        recommendedComponents: [],
-        queryType: "component",
-        rationale: [],
-        reason: `AI recommendation response did not include JSON (${provider})`
-      };
-    }
+      const payload = await response.json();
+      const rawText = extractText(payload);
+      const rawJson = extractJsonObject(rawText);
 
-    const parsed = JSON.parse(rawJson);
-    const recommendedComponents = sanitizeRecommendedComponents(
-      parsed?.recommendedComponents
-    );
-    const rationale = sanitizeRationale(parsed?.rationale);
-    const queryType = sanitizeQueryType(parsed?.queryType);
-    const reason = sanitizeReason(parsed?.reason);
+      if (!rawJson) {
+        lastErrorReason = `AI recommendation response did not include JSON (${provider})`;
+        continue;
+      }
 
-    if (recommendedComponents.length === 0) {
-      return {
-        recommendedComponents: [],
-        queryType,
-        rationale,
-        reason:
+      const parsed = JSON.parse(rawJson);
+      const recommendedComponents = sanitizeRecommendedComponents(
+        parsed?.recommendedComponents
+      );
+      const rationale = sanitizeRationale(parsed?.rationale);
+      const queryType = sanitizeQueryType(parsed?.queryType);
+      const scope = sanitizeScope(parsed?.scope, queryType);
+      const needsLayout = sanitizeNeedsLayout(parsed?.needsLayout, scope);
+      const confidence = sanitizeConfidence(parsed?.confidence);
+      const intentTags = sanitizeIntentTags(parsed?.intentTags);
+      const strategy = sanitizeStrategy(parsed?.strategy, queryType, intentTags);
+      const reason = sanitizeReason(parsed?.reason);
+
+      if (recommendedComponents.length === 0) {
+        lastErrorReason =
           reason ??
-          `AI recommendation returned no valid components from allow-list (${provider})`
-      };
-    }
+          `AI recommendation returned no valid components from allow-list (${provider})`;
+        continue;
+      }
 
-    return {
-      recommendedComponents,
-      queryType,
-      rationale
-    };
-  } catch (error) {
-    return {
-      recommendedComponents: [],
-      queryType: "component",
-      rationale: [],
-      reason:
+      return {
+        recommendedComponents,
+        queryType,
+        scope,
+        needsLayout,
+        confidence,
+        intentTags,
+        strategy,
+        rationale
+      };
+
+    } catch (error) {
+      lastErrorReason =
         error instanceof Error
           ? `AI recommendation error (${provider}): ${error.message}`
-          : `AI recommendation error (${provider})`
-    };
-  } finally {
-    clearTimeout(timeout);
+          : `AI recommendation error (${provider})`;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+
+  return {
+    recommendedComponents: [],
+    queryType: "component",
+    scope: "component",
+    needsLayout: false,
+    confidence: 0,
+    intentTags: [],
+    strategy: "scaffold",
+    rationale: [],
+    reason: lastErrorReason ?? `AI recommendation failed (${provider})`
+  };
 }

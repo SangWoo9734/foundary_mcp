@@ -1,88 +1,19 @@
-import { normalizeText } from "./normalize.js";
 import { recommendComponentsWithMode } from "./recommend.js";
 import type {
   GenerateOptions,
   GenerateResult,
-  QueryTypeHint,
-  RecommendationResult
+  GenerationStrategy,
+  QueryScopeHint,
+  QueryTypeHint
 } from "./types.js";
 
-function buildSelectedComponents(
-  queryType: QueryTypeHint,
-  queryTokens: string[],
-  results: RecommendationResult[]
-): string[] {
-  const ranked = Array.from(new Set(results.map((result) => result.component.name)));
-  const available = new Set(ranked);
-  const selected: string[] = [];
-
-  function pick(name: string): void {
-    if (available.has(name) && !selected.includes(name)) {
-      selected.push(name);
-    }
-  }
-
-  if (queryType === "page") {
-    pick("Layout");
-    pick("Card");
-    if (queryTokens.some((token) => ["login", "auth", "edit", "profile", "form"].includes(token))) {
-      pick("Form");
-      pick("Input");
-      pick("Button");
-    } else {
-      pick("Input");
-      pick("Button");
-    }
-  }
-
-  if (queryType === "section") {
-    pick("Card");
-    pick("Form");
-    pick("Input");
-    pick("Button");
-  }
-
-  if (queryType === "component") {
-    if (queryTokens.includes("password")) {
-      pick("Input");
-      pick("Icon");
-    } else if (queryTokens.includes("search")) {
-      pick("Input");
-      pick("Icon");
-    } else if (queryTokens.includes("button") || queryTokens.includes("submit")) {
-      pick("Button");
-    } else {
-      pick("Input");
-      pick("Button");
-      pick("Card");
-    }
-  }
-
-  for (const name of ranked) {
-    if (selected.length >= 5) {
-      break;
-    }
-
-    pick(name);
-  }
-
-  return selected.slice(0, 5);
-}
-
-function inferQueryTypeFromTokens(tokens: string[]): QueryTypeHint {
-  if (tokens.some((token) => ["page", "screen", "layout"].includes(token))) {
-    return "page";
-  }
-
-  if (tokens.some((token) => ["section", "card", "block"].includes(token))) {
-    return "section";
-  }
-
-  return "component";
-}
-
-function buildComponentLevelJsx(query: string, selected: Set<string>): string {
+function renderComponentJsx(query: string, selected: Set<string>): string {
   const lower = query.toLowerCase();
+  const wantsAction = lower.includes("button") || lower.includes("submit");
+
+  if (wantsAction && selected.has("Button")) {
+    return `<Button type="submit">Submit</Button>`;
+  }
 
   if (selected.has("Input") && lower.includes("password")) {
     return `<Input placeholder="Password" trailingIcon="eye" />`;
@@ -109,7 +40,7 @@ function buildComponentLevelJsx(query: string, selected: Set<string>): string {
   return `<Button type="button">Continue</Button>`;
 }
 
-function buildSectionLevelJsx(selected: Set<string>): string {
+function renderSectionJsx(selected: Set<string>): string {
   const inputBlock = selected.has("Input")
     ? `    <Input placeholder="Field value" />\n`
     : "";
@@ -118,19 +49,25 @@ function buildSectionLevelJsx(selected: Set<string>): string {
     : "";
   const formBlock = selected.has("Form")
     ? `<Form>\n${inputBlock}${actionBlock}  </Form>`
-    : `<Card title="Section">\n  Content\n</Card>`;
+    : `Content`;
+
+  if (selected.has("Card") && selected.has("Form")) {
+    return `<Card title="Section">
+  ${formBlock.replace(/\n/g, "\n  ")}
+</Card>`;
+  }
 
   if (selected.has("Card")) {
     return `<Card title="Section">
-  ${formBlock.replace(/\n/g, "\n  ")}
+  Content
 </Card>`;
   }
 
   return formBlock;
 }
 
-function buildPageLevelJsx(selected: Set<string>): string {
-  const section = buildSectionLevelJsx(selected);
+function renderPageJsx(selected: Set<string>, query: string): string {
+  const section = renderSectionJsx(selected);
 
   if (selected.has("Layout")) {
     return `<Layout title="Generated Page">
@@ -138,26 +75,102 @@ function buildPageLevelJsx(selected: Set<string>): string {
 </Layout>`;
   }
 
-  return section;
+  return renderComponentJsx(query, selected);
+}
+
+function renderListingJsx(
+  scope: QueryScopeHint,
+  selected: Set<string>
+): string {
+  const listingBody = `<div className="grid gap-4">
+  <Card title="Product Item 1">...</Card>
+  <Card title="Product Item 2">...</Card>
+  <Card title="Product Item 3">...</Card>
+  {/* repeat card items */}
+</div>`;
+
+  if (scope === "component") {
+    return `<Card title="Product Item">...</Card>`;
+  }
+
+  if (selected.has("Layout")) {
+    return `<Layout title="Generated Listing Page">
+  ${listingBody.replace(/\n/g, "\n  ")}
+</Layout>`;
+  }
+
+  return listingBody;
+}
+
+function renderByQueryType(
+  queryType: QueryTypeHint,
+  scope: QueryScopeHint,
+  strategy: GenerationStrategy,
+  query: string,
+  selected: Set<string>
+): string {
+  if (strategy === "listing") {
+    return renderListingJsx(scope, selected);
+  }
+
+  if (scope === "page_section") {
+    return renderPageJsx(selected, query);
+  }
+
+  if (queryType === "page") {
+    return renderPageJsx(selected, query);
+  }
+
+  if (queryType === "section") {
+    return renderSectionJsx(selected);
+  }
+
+  return renderComponentJsx(query, selected);
+}
+
+function extractUsedComponents(selectedComponents: string[], jsx: string): string[] {
+  const used = selectedComponents.filter((name) => jsx.includes(`<${name}`));
+  return used.length > 0 ? used : selectedComponents;
 }
 
 function buildRationale(
   queryType: QueryTypeHint,
   selectedComponents: string[],
+  strategy: GenerationStrategy,
   aiRationale: string[],
   intentSource: "ai" | "fallback"
 ): string[] {
-  const rationale = [...aiRationale];
+  const selectedSet = new Set(selectedComponents.map((name) => name.toLowerCase()));
+  const normalizedAiRationale = aiRationale.filter((line) => {
+    const lower = line.toLowerCase();
 
-  if (rationale.length === 0) {
-    rationale.push(
-      intentSource === "ai"
-        ? "The component selection was provided by the AI intent layer."
-        : "AI intent was unavailable, so metadata matching was used as fallback."
-    );
-  }
+    if (lower.includes("layout") && !selectedSet.has("layout")) {
+      return false;
+    }
+
+    if (lower.includes("form") && !selectedSet.has("form")) {
+      return false;
+    }
+
+    if (lower.includes("input") && !selectedSet.has("input")) {
+      return false;
+    }
+
+    if (lower.includes("button") && !selectedSet.has("button")) {
+      return false;
+    }
+
+    return true;
+  });
+  const rationale = [
+    intentSource === "ai"
+      ? "The component selection was provided by the AI intent layer."
+      : "AI intent was unavailable, so fallback composition selected components."
+  ];
+  rationale.push(...normalizedAiRationale);
 
   rationale.push(`Query type interpreted as ${queryType}.`);
+  rationale.push(`Generation strategy: ${strategy}.`);
   rationale.push(
     `Generated composition is built from: ${selectedComponents.join(", ")}.`
   );
@@ -170,13 +183,16 @@ export async function generateUI(
   options: GenerateOptions = {}
 ): Promise<GenerateResult> {
   const recommendation = await recommendComponentsWithMode(query, options);
-  const tokens = normalizeText(query);
-  const inferredType = recommendation.queryType ?? inferQueryTypeFromTokens(tokens);
-  const selectedComponents = buildSelectedComponents(
-    inferredType,
-    tokens,
-    recommendation.results
-  );
+  const queryType = recommendation.queryType ?? "component";
+  const scope =
+    recommendation.scope ??
+    (queryType === "page"
+      ? "page"
+      : queryType === "section"
+        ? "standalone_section"
+        : "component");
+  const selectedComponents = recommendation.selectedComponents;
+  const strategy = recommendation.strategy ?? "scaffold";
 
   if (selectedComponents.length === 0) {
     return {
@@ -196,28 +212,30 @@ export async function generateUI(
         intentSource: recommendation.intentSource,
         provider: recommendation.provider,
         model: recommendation.model,
-        queryType: inferredType,
+        queryType,
+        scope,
+        needsLayout: recommendation.needsLayout,
+        confidence: recommendation.confidence,
+        intentTags: recommendation.intentTags,
+        strategy,
         note: recommendation.note
       }
     };
   }
 
   const selectedSet = new Set(selectedComponents);
-  const jsx =
-    inferredType === "page"
-      ? buildPageLevelJsx(selectedSet)
-      : inferredType === "section"
-        ? buildSectionLevelJsx(selectedSet)
-        : buildComponentLevelJsx(query, selectedSet);
+  const jsx = renderByQueryType(queryType, scope, strategy, query, selectedSet);
+  const usedComponents = extractUsedComponents(selectedComponents, jsx);
 
   return {
     query,
     status: "ok",
-    selectedComponents,
+    selectedComponents: usedComponents,
     jsx,
     rationale: buildRationale(
-      inferredType,
-      selectedComponents,
+      queryType,
+      usedComponents,
+      strategy,
       recommendation.rationale ?? [],
       recommendation.intentSource
     ),
@@ -225,7 +243,12 @@ export async function generateUI(
       intentSource: recommendation.intentSource,
       provider: recommendation.provider,
       model: recommendation.model,
-      queryType: inferredType,
+      queryType,
+      scope,
+      needsLayout: recommendation.needsLayout,
+      confidence: recommendation.confidence,
+      intentTags: recommendation.intentTags,
+      strategy,
       note: recommendation.note
     }
   };
