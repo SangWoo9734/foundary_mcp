@@ -65,3 +65,13 @@
 - 임베딩 인프라를 먼저 도입하는 대규모 리팩터링
 
 위 항목은 AI 보강 결과가 안정화된 뒤 진행한다.
+
+## 6. 운영 기본값 (현재)
+
+- 기본 provider: `gemini`
+- 기본 model:
+  - gemini: `gemini-2.0-flash`
+  - openai: `gpt-5-mini`
+- timeout: `5000ms`
+- retry: `1회` (총 2번 시도)
+- 실패 시 동작: metadata fallback 결과 반환 + `meta.note`에 실패 사유 기록

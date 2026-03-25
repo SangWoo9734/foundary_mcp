@@ -22,7 +22,7 @@
 따라서 다음 기준으로 범위를 제한한다.
 
 - 지원 대상은 현재 구현된 핵심 컴포넌트와 직접 연결되는 query에 한정한다.
-- `settings form`, `dashboard section`처럼 현재 baseline에서 의미가 덜 명확한 query는 대표 지원 범위에서 제외한다.
+- 애매 케이스(`user list`, `settings form`, `dashboard section`)도 최소 조합 결과를 기준으로 포함해 회귀 검증한다.
 - `generate`는 완성 기능이 아니라 러프한 퍼블리싱을 가능하게 하는 수준의 조합 결과를 제공하는 것으로 본다.
 
 ## 3. 평가 기준
@@ -70,20 +70,26 @@ query는 의미적으로 다음 세 층으로 나눠서 본다.
 | --- | --- | --- | --- | --- | --- | --- |
 | `login page` | page | 인증 화면 구성 | `Form`, `Input`, `Button` | `Layout`, `Card` | 로그인 폼 구조 | page 수준 query |
 | `profile edit` | page | 수정 흐름 구성 | `Layout`, `Card`, `Form`, `Input`, `Button` | - | 수정 폼 구조 | Input 개수는 고정하지 않음 |
+| `profile section` | section | 프로필 섹션 블록 | `Card` | `Form`, `Input`, `Button` | section 조각 | page가 아닌 section 맥락 |
 | `search field` | component | 검색 입력 | `Input` | `Icon` | 검색용 input 조각 | icon은 optional |
 | `password input` | component | 비밀번호 입력 | `Input` | `Icon`, `Form` | password input 조각 | trailing icon 허용 |
 | `button for submit` | component | 제출 액션 | `Button` | - | submit button 조각 | 단일 컴포넌트 generate 허용 |
 | `form section` | section | grouped form block | `Form`, `Input`, `Button` | `Card` | form section 조각 | section 수준 query |
 | `profile card` | section | profile 정보 카드 | `Card` | `Button` | card 조각 | 카드 중심 결과 기대 |
 | `page layout` | page | page shell / layout | `Layout` | `Card` | layout 조각 | 구조 컴포넌트 중심 |
+| `dashboard page` | page | 대시보드 화면 전체 | `Layout`, `Card` | `Input`, `Button` | page scaffold 조각 | page vs section 대비 |
+| `shopping page with a lot of products` | page | 상품 목록 페이지 | `Layout`, `Card` | `Input`, `Button` | listing scaffold 조각 | commerce/listing 확장 케이스 |
+| `user list` | page | 목록 조회 화면 골격 | `Layout`, `Card` | `Input`, `Button` | list 전용 컴포넌트가 없으므로 page scaffold | 애매 케이스 |
+| `settings form` | section | 설정 입력 블록 | `Card`, `Form`, `Input`, `Button` | `Layout` | form section 조각 | 애매 케이스 |
+| `dashboard section` | section | 대시보드 섹션 골격 | `Layout`, `Card` | `Input`, `Button` | section in layout 조각 | page_section 맥락 |
 
 ## 5. 현재 제외한 query
 
-| query | 제외 이유 | 현재 기대 동작 |
+| query | 제약 | 현재 기대 동작 |
 | --- | --- | --- |
-| `settings form` | 단일 form submission보다 setting item 처리 의미가 강해 현재 baseline 범위와 다름 | 현재 단계에서는 evaluation set에서 제외 |
-| `user list` | list / collection display는 전용 리스트 컴포넌트 부재로 품질 변동이 큼 | AI/fallback 조합으로 근사 결과를 허용하되 품질 개선 대상 |
-| `dashboard section` | display/dashboard 계열은 이후 확장 범위로 보는 것이 더 적절함 | 현재 단계에서는 evaluation set에서 제외 |
+| `user list` | 전용 list/table 컴포넌트 없음 | `Layout + Card` 중심 scaffold와 보조 입력/액션을 허용 |
+| `settings form` | 도메인별 설정 항목 semantics 부재 | section 수준 `Card + Form + Input + Button` 조합 유지 |
+| `dashboard section` | 차트/통계 전용 컴포넌트 없음 | page/section scaffold로 근사 결과 반환 |
 
 ## 6. 이후 활용 방식
 
