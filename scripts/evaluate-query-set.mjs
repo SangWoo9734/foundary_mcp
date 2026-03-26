@@ -150,7 +150,11 @@ function runCli(command, query, extraArgs = []) {
   ];
   const result = spawnSync(process.execPath, args, {
     cwd: workspaceRoot,
-    encoding: "utf8"
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DS_AI_FORCE_FALLBACK: "1"
+    }
   });
 
   if (result.status !== 0) {

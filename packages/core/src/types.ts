@@ -28,6 +28,7 @@ export type RecommendationResult = MatchResult;
 export type RecommendComponentsOptions = {
   model?: string;
   provider?: AIProvider;
+  forceFallback?: boolean;
 };
 
 export type RecommendComponentsOutput = {

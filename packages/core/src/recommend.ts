@@ -277,6 +277,8 @@ export async function recommendComponentsWithMode(
   options: RecommendComponentsOptions = {}
 ): Promise<RecommendComponentsOutput> {
   const provider = options.provider ?? "gemini";
+  const forceFallback =
+    options.forceFallback ?? process.env.DS_AI_FORCE_FALLBACK === "1";
   const model =
     options.model ?? (provider === "gemini" ? "gemini-2.0-flash" : "gpt-5-mini");
   const normalizedQuery = normalizeQuery(query);
@@ -287,7 +289,19 @@ export async function recommendComponentsWithMode(
   const fallbackIntentTags = inferIntentTags(queryTokens);
   const fallbackStrategy = inferStrategy(fallbackQueryType, fallbackIntentTags);
 
-  const aiIntent = await resolveRecommendationsWithAI(query, { model, provider });
+  const aiIntent = forceFallback
+    ? {
+        recommendedComponents: [] as string[],
+        queryType: "component" as QueryTypeHint,
+        scope: "component" as QueryScopeHint,
+        needsLayout: false,
+        confidence: 0,
+        intentTags: [] as string[],
+        strategy: "scaffold" as const,
+        rationale: [] as string[],
+        reason: "AI resolution skipped (forced fallback mode)"
+      }
+    : await resolveRecommendationsWithAI(query, { model, provider });
 
   if (aiIntent.recommendedComponents.length > 0) {
     const selectedComponents = normalizeSelectionByScope(
